@@ -1,0 +1,85 @@
+OBJETIVOS DEL PROYECTO
+
+Objetivo general
+
+Diseñar e implementar, en un plazo de 16 semanas, una plataforma inmobiliaria web con backend desarrollado en Go, base de datos PostgreSQL e integración con un chatbot de WhatsApp, que permita a los clientes buscar propiedades en venta o alquiler y a la agencia gestionar clientes, preferencias, recomendaciones y seguimientos automatizados.
+
+Este objetivo es SMART porque:
+
+- Específico: define una plataforma web inmobiliaria con chatbot, base de datos y funciones de seguimiento.
+- Medible: se evaluará mediante la implementación y demostración de los módulos definidos.
+- Alcanzable: se utilizarán tecnologías conocidas y servicios externos disponibles.
+- Relevante: responde a la necesidad de mejorar la búsqueda de propiedades y el seguimiento de clientes.
+- Temporal: deberá completarse en 16 semanas.
+
+Objetivos específicos
+
+1. Implementar el catálogo de propiedades
+
+Desarrollar, durante las primeras 6 semanas, un módulo que permita a los agentes registrar, modificar, eliminar y consultar propiedades en venta o alquiler, incluyendo como mínimo precio, ubicación, tipo de operación, superficie, habitaciones, baños, descripción, estado e imágenes.
+
+- Específico: se concentra en la gestión del catálogo inmobiliario.
+- Medible: deberá incluir al menos 10 campos de información y las operaciones CRUD.
+- Alcanzable: se implementará mediante una API en Go y PostgreSQL.
+- Relevante: constituye la base de información para las búsquedas de los clientes.
+- Temporal: deberá estar disponible al finalizar la sexta semana.
+
+2. Desarrollar el buscador y sistema de filtrado
+
+Implementar, antes de finalizar la semana 8, un buscador web que permita filtrar propiedades por tipo de operación, ubicación, precio máximo y mínimo, cantidad de habitaciones, superficie y características adicionales.
+
+- Específico: define los filtros principales para encontrar propiedades.
+- Medible: deberá admitir al menos 6 criterios de filtrado y mostrar resultados ordenados.
+- Alcanzable: PostgreSQL permitirá utilizar consultas e índices para resolver las búsquedas.
+- Relevante: reduce el tiempo que los clientes necesitan para encontrar opciones adecuadas.
+- Temporal: deberá completarse durante las primeras 8 semanas.
+
+3. Registrar y administrar las preferencias de los clientes
+
+Implementar, antes de la semana 10, un módulo que permita registrar los datos de contacto, preferencias de búsqueda, búsquedas guardadas, consentimiento de comunicación y fecha aproximada de vencimiento del contrato de cada cliente.
+
+- Específico: establece la información necesaria para personalizar el seguimiento.
+- Medible: cada cliente deberá poder tener al menos una búsqueda guardada y una fecha de seguimiento.
+- Alcanzable: la información se almacenará en entidades relacionadas de PostgreSQL.
+- Relevante: permite mantener una relación continua con el cliente.
+- Temporal: deberá estar disponible antes de finalizar la décima semana.
+
+4. Integrar el chatbot de WhatsApp
+
+Desarrollar e integrar, antes de la semana 12, un chatbot capaz de interpretar consultas de clientes, buscar propiedades, mostrar opciones, guardar preferencias y actualizar datos autorizados mediante la API del backend.
+
+- Específico: limita el chatbot a operaciones inmobiliarias concretas.
+- Medible: deberá responder correctamente al menos el 80 % de un conjunto de 20 consultas de prueba.
+- Alcanzable: se utilizará procesamiento de lenguaje natural y herramientas controladas por el backend.
+- Relevante: facilita la atención de clientes por un canal de uso frecuente.
+- Temporal: deberá completarse antes de finalizar la semana 12.
+
+5. Automatizar las recomendaciones y los recordatorios
+
+Implementar, antes de la semana 14, un proceso programado que compare nuevas propiedades con las búsquedas guardadas y genere recomendaciones, además de crear recordatorios cuando se aproxime el vencimiento estimado de un contrato.
+
+- Específico: automatiza dos tareas de seguimiento: recomendaciones y recordatorios.
+- Medible: las coincidencias deberán procesarse como máximo cada 15 minutos y cada notificación deberá quedar registrada.
+- Alcanzable: se utilizará un worker con tareas programadas y una cola de mensajes.
+- Relevante: mejora la posibilidad de ofrecer propiedades oportunamente y conservar clientes.
+- Temporal: deberá estar implementado antes de la semana 14.
+
+6. Aplicar seguridad, permisos y auditoría
+
+Implementar antes de la semana 15 un sistema de autenticación, roles y permisos que proteja la información de clientes y propiedades, registre las modificaciones realizadas y evite el acceso directo a la base de datos desde el frontend o el chatbot.
+
+- Específico: protege los datos y controla las operaciones del sistema.
+- Medible: el 100 % de las operaciones de modificación deberá pasar por la API y quedar asociada a un usuario o proceso autorizado.
+- Alcanzable: se aplicarán autenticación, autorización, consultas parametrizadas y registro de auditoría.
+- Relevante: el sistema manejará datos personales, preferencias y fechas contractuales.
+- Temporal: deberá completarse antes de la semana 15.
+
+7. Validar el funcionamiento integral de la plataforma
+
+Realizar durante la semana 16 pruebas funcionales, de integración y de usabilidad sobre la plataforma web, el backend, la base de datos y el chatbot, logrando al menos un 90 % de casos de prueba aprobados antes de la presentación final.
+
+- Específico: evalúa el funcionamiento completo de la solución.
+- Medible: se deberán aprobar al menos 9 de cada 10 casos de prueba.
+- Alcanzable: las pruebas se realizarán con datos de propiedades y clientes simulados.
+- Relevante: permite comprobar que la solución responde al problema planteado.
+- Temporal: deberá finalizar durante la semana 16.

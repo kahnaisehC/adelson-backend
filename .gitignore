@@ -1,0 +1,25 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Private keys and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+
+# Go build artifacts
+/bin/
+*.exe
+*.test
+*.out
+coverage.out
+
+# Editor and operating system files
+.DS_Store
+.idea/
+.vscode/
+*.swp

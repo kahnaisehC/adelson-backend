@@ -1,0 +1,177 @@
+Idea del Proyecto
+
+1. Enunciar la solución
+
+Se desarrollará una plataforma web para una agencia inmobiliaria que facilite la publicación, búsqueda y filtrado de inmuebles disponibles para venta o alquiler. La plataforma permitirá que los clientes encuentren propiedades según sus preferencias y puedan comunicarse con la agencia mediante un chatbot integrado con WhatsApp.
+
+
+El chatbot permitirá:
+
+- Buscar inmuebles según ubicación, precio, tipo, cantidad de habitaciones y operación.
+- Mostrar información e imágenes de las propiedades.
+- Registrar los datos y preferencias del cliente.
+- Guardar búsquedas personalizadas.
+- Actualizar las preferencias del cliente.
+- Registrar la fecha aproximada de vencimiento de su contrato de alquiler.
+- Enviar nuevas opciones que coincidan con sus criterios.
+- Recordar al cliente cuando se aproxime la fecha de finalización de su contrato.
+- Derivar la conversación a un agente humano cuando sea necesario.
+- Permitir que el cliente solicite dejar de recibir mensajes.
+
+La plataforma contará también con un panel administrativo para que la agencia pueda gestionar propiedades, clientes, consultas, preferencias y seguimientos.
+
+2. Enunciar los requerimientos
+
+Requerimientos funcionales
+
+- Registrar, modificar, eliminar y consultar inmuebles.
+- Clasificar inmuebles como venta o alquiler.
+- Registrar características como precio, ubicación, superficie, habitaciones, baños y servicios.
+- Cargar varias imágenes por inmueble.
+- Buscar inmuebles por diferentes criterios.
+- Filtrar resultados por precio, ubicación, tipo de operación y características.
+- Mostrar el detalle completo de cada inmueble.
+- Registrar clientes y sus datos de contacto.
+- Asociar clientes con sus preferencias de búsqueda.
+- Guardar búsquedas personalizadas.
+- Registrar conversaciones y mensajes de WhatsApp.
+- Registrar la fecha estimada de vencimiento del contrato.
+- Comparar nuevos inmuebles con las preferencias de cada cliente.
+- Generar tareas y recordatorios de seguimiento.
+- Enviar recomendaciones de inmuebles compatibles.
+- Registrar el consentimiento del cliente para recibir mensajes.
+- Permitir cancelar las notificaciones.
+- Gestionar usuarios y agentes de la agencia.
+- Registrar las modificaciones realizadas sobre clientes e inmuebles.
+- Permitir que un agente humano intervenga en una conversación.
+
+Requerimientos no funcionales
+
+- La aplicación deberá utilizar PostgreSQL como base de datos.
+- El backend deberá desarrollarse en Go.
+- Las contraseñas y datos sensibles deberán almacenarse de forma segura.
+- La comunicación deberá utilizar HTTPS.
+- Las consultas a la base de datos deberán ser parametrizadas.
+- El sistema deberá contar con roles y permisos.
+- El sistema deberá realizar copias de seguridad periódicas.
+- El sistema deberá ser responsive para dispositivos móviles.
+- La aplicación deberá permitir escalar la cantidad de propiedades y clientes.
+- Las operaciones importantes deberán quedar registradas en una auditoría.
+- El sistema deberá evitar el envío duplicado de mensajes.
+- El sistema deberá respetar las políticas de WhatsApp y las normas de protección de datos.
+- Las notificaciones automáticas deberán enviarse únicamente a clientes que hayan dado su consentimiento.
+
+3. Arquitectura de la información
+
+Estructura principal del sitio web
+
+Inicio
+├── Buscar propiedades
+│   ├── Venta
+│   ├── Alquiler
+│   └── Filtros avanzados
+├── Resultados de búsqueda
+├── Detalle de propiedad
+├── Favoritos
+├── Mis búsquedas
+├── Mi perfil
+└── Contacto
+
+Panel administrativo
+├── Dashboard
+├── Propiedades
+├── Clientes
+├── Búsquedas guardadas
+├── Conversaciones
+├── Seguimientos
+├── Recordatorios
+└── Usuarios y permisos
+
+Principales entidades de información
+
+- Propiedad: dirección, ubicación, precio, tipo de operación, características, estado e imágenes.
+- Cliente: nombre, teléfono, correo, preferencias y estado de comunicación.
+- Preferencia de búsqueda: presupuesto, ubicación, tipo de propiedad, operación y características deseadas.
+- Búsqueda guardada: criterios almacenados por el cliente.
+- Conversación: cliente, canal, fecha y estado.
+- Mensaje: contenido, remitente, fecha, estado de entrega y proveedor.
+- Contrato: cliente, propiedad y fecha aproximada de vencimiento.
+- Seguimiento: fecha programada, motivo, estado y resultado.
+- Consentimiento: autorización para recibir comunicaciones y fecha de autorización.
+- Usuario interno: agente, administrador, rol y permisos.
+- Auditoría: usuario, acción, entidad modificada y fecha.
+
+4. Arquitectura de software
+
+Se utilizará una arquitectura modular basada en Clean Architecture o arquitectura hexagonal.
+
+Frontend web
+      │
+      ▼
+API REST en Go
+      │
+      ├── Módulo de propiedades
+      ├── Módulo de clientes
+      ├── Módulo de búsquedas
+      ├── Módulo de conversaciones
+      ├── Módulo de seguimientos
+      ├── Módulo de notificaciones
+      └── Módulo de IA
+      │
+      ▼
+PostgreSQL
+
+Componentes
+
+- Frontend: interfaz web para clientes y panel administrativo.
+- API backend: desarrollada en Go.
+- Base de datos: PostgreSQL.
+- Integración WhatsApp: WhatsApp Business Cloud API o un proveedor como Twilio.
+- Worker de tareas: procesa coincidencias, recordatorios y envíos pendientes.
+- Cola de mensajes: evita bloquear la API y permite reintentar envíos fallidos.
+- Servicio de almacenamiento: conserva las imágenes de las propiedades.
+- Servicio de IA: interpreta mensajes y utiliza operaciones controladas del backend.
+
+El chatbot y el frontend no accederán directamente a la base de datos. Todas las operaciones pasarán por la API, donde se aplicarán validaciones, permisos y reglas de negocio.
+
+5. Patrones de diseño
+
+- Repository: separa el acceso a PostgreSQL de la lógica de negocio.
+- Service Layer: centraliza las reglas del sistema, como búsqueda y seguimiento de clientes.
+- Dependency Injection: facilita las pruebas y permite reemplazar servicios externos.
+- Adapter: permite integrar WhatsApp, correo electrónico u otros proveedores sin modificar el dominio.
+- Strategy: permite aplicar diferentes criterios de búsqueda y recomendación.
+- Observer o Pub/Sub: notifica al sistema cuando se publica una nueva propiedad.
+- Factory: crea distintos tipos de notificaciones o mensajes.
+- Facade: ofrece al chatbot una interfaz sencilla para ejecutar acciones del sistema.
+- Outbox Pattern: garantiza que los cambios en la base de datos y los mensajes pendientes se procesen de forma confiable.
+- Role-Based Access Control: controla el acceso según el rol del usuario.
+
+6. Incorporación de IA mediante un chatbot
+
+Se incorporará un chatbot inteligente integrado con WhatsApp y, opcionalmente, con la página web. El chatbot utilizará procesamiento de lenguaje natural para comprender consultas como:
+
+"Busco un departamento de dos habitaciones en el centro, hasta 800 dólares."
+
+La IA identificará los criterios de búsqueda y los convertirá en parámetros estructurados. Luego utilizará herramientas definidas por el backend, por ejemplo:
+
+- buscar_propiedades
+- guardar_preferencias
+- actualizar_datos_cliente
+- registrar_fecha_contrato
+- crear_seguimiento
+- consultar_estado_conversacion
+
+La IA no tendrá permisos para ejecutar SQL directamente ni para modificar información sin validación. Las operaciones de actualización deberán ser autorizadas y, cuando sean sensibles, confirmadas por el cliente.
+
+El chatbot podrá:
+
+- Interpretar lenguaje natural.
+- Solicitar información faltante.
+- Recomendar propiedades.
+- Guardar preferencias.
+- Responder preguntas sobre inmuebles.
+- Recordar fechas importantes.
+- Transferir la conversación a un agente humano.
+
+Las recomendaciones automáticas se generarán mediante un proceso programado que comparará nuevas propiedades con las búsquedas guardadas. Para enviar mensajes fuera de la ventana de atención de WhatsApp, se utilizarán plantillas aprobadas y consentimiento previo del cliente.
