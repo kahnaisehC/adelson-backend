@@ -2,8 +2,11 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"strconv"
+
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
@@ -15,6 +18,10 @@ type Config struct {
 }
 
 func Load() (Config, error) {
+	if err := godotenv.Load(".env"); err != nil && !os.IsNotExist(err) {
+		return Config{}, fmt.Errorf("load .env: %w", err)
+	}
+
 	cfg := Config{
 		Addr:         valueOrDefault("ADDR", ":8080"),
 		DatabaseURL:  os.Getenv("DATABASE_URL"),

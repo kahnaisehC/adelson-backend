@@ -9,15 +9,13 @@ Backend REST en Go para AdelsonWeb y AdelAI. La implementación sigue `docs/api/
 
 ## Configuración
 
-Copiar `.env.example` a un archivo de entorno y definir las variables:
+Crear `.env` a partir de `.env.example` y completar las variables:
 
 ```bash
-export ADDR=:8080
-export DATABASE_URL='postgres://user:password@localhost:5432/adelson?sslmode=disable'
-export JWT_SECRET='use-a-long-random-secret'
-export SERVICE_TOKEN='use-a-secret-for-internal-services'
-export COOKIE_SECURE=false
+cp .env.example .env
 ```
+
+`config.Load()` carga `.env` automáticamente. Las variables exportadas en el entorno tienen prioridad sobre los valores del archivo.
 
 Aplicar el esquema antes de iniciar la API:
 
