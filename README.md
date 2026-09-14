@@ -23,6 +23,14 @@ Aplicar el esquema antes de iniciar la API:
 psql "$DATABASE_URL" -f database/setup.sql
 ```
 
+Si no tienes PostgreSQL instalado, el script usa Podman o Docker para crear una instancia local persistente:
+
+```bash
+./scripts/setup-db.sh
+```
+
+El esquema se aplica automáticamente la primera vez que se crea el volumen.
+
 Iniciar:
 
 ```bash
