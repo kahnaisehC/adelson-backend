@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: adelson-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SERVICE_TOKEN
+        generateValue: true
+      - key: COOKIE_SECURE
+        value: "true"

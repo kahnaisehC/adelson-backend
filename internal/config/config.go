@@ -23,7 +23,7 @@ func Load() (Config, error) {
 	}
 
 	cfg := Config{
-		Addr:         valueOrDefault("ADDR", ":8080"),
+		Addr:         resolveAddr(),
 		DatabaseURL:  os.Getenv("DATABASE_URL"),
 		JWTSecret:    os.Getenv("JWT_SECRET"),
 		ServiceToken: os.Getenv("SERVICE_TOKEN"),
@@ -50,4 +50,14 @@ func valueOrDefault(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func resolveAddr() string {
+	if value := os.Getenv("ADDR"); value != "" {
+		return value
+	}
+	if port := os.Getenv("PORT"); port != "" {
+		return ":" + port
+	}
+	return ":8080"
 }
