@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-
+	"github.com/rs/cors"
 	"adelson-backend/internal/config"
 	"adelson-backend/internal/httpapi"
 	"adelson-backend/internal/store"
@@ -29,9 +29,22 @@ func main() {
 	}
 	defer db.Close()
 
+	c := cors.New(cors.Options{
+		AllowedOrigins: []string{
+			"https://tu-sitio.pages.dev", // Reemplaza con tu dominio real de Cloudflare Pages
+			"http://localhost:5173",     // Para pruebas locales con Vite
+		},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Authorization", "Content-Type"},
+		AllowCredentials: true,
+	})
+	
+	apiHandler := httpapi.New(cfg, db, logger)
+	handlerWithCORS := c.Handler(apiHandler)
+
 	server := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           httpapi.New(cfg, db, logger),
+		Handler:           handlerWithCORS,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,
