@@ -1,6 +1,7 @@
 -- Datos de ejemplo para el sitio público.
 -- Requiere que database/setup.sql ya esté aplicado.
--- Reemplazar pub-xxxxxxxx.r2.dev por el dominio público real del bucket R2.
+-- Para producción usar database/neon_production_sync.sql.
+-- La contraseña del agente demo se genera aleatoriamente.
 
 INSERT INTO personas (id, nombre, apellido, dni, correo_electronico, contrasena_hash)
 VALUES (
@@ -9,7 +10,7 @@ VALUES (
     'Demo',
     '30000000',
     'agente@adelson.example',
-    crypt('Adelson123!', gen_salt('bf'))
+    crypt(gen_random_uuid()::text, gen_salt('bf'))
 )
 ON CONFLICT (correo_electronico) DO NOTHING;
 
@@ -108,12 +109,12 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO imagenes (id, inmueble_id, url_archivo, orden_visualizacion, es_portada)
 VALUES
-('22222222-2222-4222-8222-222222222101', '11111111-1111-4111-8111-111111111101', 'https://pub-xxxxxxxx.r2.dev/inmuebles/casa-villa-morra.jpg', 1, true),
-('22222222-2222-4222-8222-222222222102', '11111111-1111-4111-8111-111111111102', 'https://pub-xxxxxxxx.r2.dev/inmuebles/departamento-centro.jpg', 1, true),
-('22222222-2222-4222-8222-222222222103', '11111111-1111-4111-8111-111111111103', 'https://pub-xxxxxxxx.r2.dev/inmuebles/terreno-san-benito.jpg', 1, true),
-('22222222-2222-4222-8222-222222222104', '11111111-1111-4111-8111-111111111104', 'https://pub-xxxxxxxx.r2.dev/inmuebles/local-centro.jpg', 1, true),
-('22222222-2222-4222-8222-222222222105', '11111111-1111-4111-8111-111111111105', 'https://pub-xxxxxxxx.r2.dev/inmuebles/galpon-industrial.jpg', 1, true),
-('22222222-2222-4222-8222-222222222106', '11111111-1111-4111-8111-111111111106', 'https://pub-xxxxxxxx.r2.dev/inmuebles/campo-ruta-16.jpg', 1, true),
-('22222222-2222-4222-8222-222222222107', '11111111-1111-4111-8111-111111111107', 'https://pub-xxxxxxxx.r2.dev/inmuebles/casa-playa.jpg', 1, true),
-('22222222-2222-4222-8222-222222222108', '11111111-1111-4111-8111-111111111108', 'https://pub-xxxxxxxx.r2.dev/inmuebles/departamento-barrio-norte.jpg', 1, true)
+('22222222-2222-4222-8222-222222222101', '11111111-1111-4111-8111-111111111101', 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1600&q=70', 1, true),
+('22222222-2222-4222-8222-222222222102', '11111111-1111-4111-8111-111111111102', 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=1600&q=70', 1, true),
+('22222222-2222-4222-8222-222222222103', '11111111-1111-4111-8111-111111111103', 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1600&q=70', 1, true),
+('22222222-2222-4222-8222-222222222104', '11111111-1111-4111-8111-111111111104', 'https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=1600&q=70', 1, true),
+('22222222-2222-4222-8222-222222222105', '11111111-1111-4111-8111-111111111105', 'https://images.unsplash.com/photo-1581094794329-c8112a89af12?auto=format&fit=crop&w=1600&q=70', 1, true),
+('22222222-2222-4222-8222-222222222106', '11111111-1111-4111-8111-111111111106', 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=1600&q=70', 1, true),
+('22222222-2222-4222-8222-222222222107', '11111111-1111-4111-8111-111111111107', 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&w=1600&q=70', 1, true),
+('22222222-2222-4222-8222-222222222108', '11111111-1111-4111-8111-111111111108', 'https://images.unsplash.com/photo-1493809842364-78817add7ffb?auto=format&fit=crop&w=1600&q=70', 1, true)
 ON CONFLICT (id) DO NOTHING;

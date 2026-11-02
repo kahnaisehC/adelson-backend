@@ -43,7 +43,13 @@ Opcionalmente cargar datos de ejemplo (un agente y ocho inmuebles con imágenes)
 psql "$DATABASE_URL" -f database/seed.sql
 ```
 
-Reemplazar `pub-xxxxxxxx.r2.dev` en `database/seed.sql` por el dominio público real del bucket R2.
+Para sincronizar una base de producción en Neon con los ocho inmuebles demo, las imágenes de Unsplash y la migración del sitio público:
+
+```bash
+psql "$DATABASE_URL" -f database/neon_production_sync.sql
+```
+
+El script genera una contraseña aleatoria para el agente demo y es idempotente. Hacer backup o crear una branch en Neon antes de ejecutarlo.
 
 Iniciar:
 
