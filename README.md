@@ -31,6 +31,20 @@ Si no tienes PostgreSQL instalado, el script usa Podman o Docker para crear una 
 
 El esquema se aplica automáticamente la primera vez que se crea el volumen.
 
+Para bases existentes, aplicar las migraciones pendientes:
+
+```bash
+psql "$DATABASE_URL" -f database/migrations/001_public_site.sql
+```
+
+Opcionalmente cargar datos de ejemplo (un agente y ocho inmuebles con imágenes):
+
+```bash
+psql "$DATABASE_URL" -f database/seed.sql
+```
+
+Reemplazar `pub-xxxxxxxx.r2.dev` en `database/seed.sql` por el dominio público real del bucket R2.
+
 Iniciar:
 
 ```bash
@@ -52,7 +66,7 @@ Implementado con PostgreSQL:
 - Gestión de usuarios internos con roles `Administrador` y `Agente`.
 - Inmuebles, búsqueda, creación, actualización, borrado lógico e imágenes.
 - Clientes, teléfonos, consentimiento y preferencias.
-- Consultas internas y consultas públicas desde un inmueble.
+- Consultas internas, consultas públicas desde un inmueble y consulta general desde `/contacto`.
 - Sesiones de chat, mensajes y transiciones de handoff.
 - Verificación básica de webhook de WhatsApp.
 
@@ -91,5 +105,6 @@ Variables de entorno requeridas:
 | `JWT_SECRET` | Secreto del JWT; `render.yaml` lo genera automáticamente. |
 | `SERVICE_TOKEN` | Token de servicio para workers/webhooks; `render.yaml` lo genera automáticamente. |
 | `COOKIE_SECURE` | `true` en producción (HTTPS). |
+| `ALLOWED_ORIGINS` | Orígenes permitidos por CORS, separados por coma. Incluir el dominio de Cloudflare Workers. |
 
 Requiere conexión a una instancia PostgreSQL accesible desde Render (p. ej. Neon o Render Postgres) con el esquema de `database/setup.sql` aplicado.

@@ -5,16 +5,18 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	Addr         string
-	DatabaseURL  string
-	JWTSecret    string
-	ServiceToken string
-	CookieSecure bool
+	Addr           string
+	DatabaseURL    string
+	JWTSecret      string
+	ServiceToken   string
+	CookieSecure   bool
+	AllowedOrigins []string
 }
 
 func Load() (Config, error) {
@@ -23,10 +25,11 @@ func Load() (Config, error) {
 	}
 
 	cfg := Config{
-		Addr:         resolveAddr(),
-		DatabaseURL:  os.Getenv("DATABASE_URL"),
-		JWTSecret:    os.Getenv("JWT_SECRET"),
-		ServiceToken: os.Getenv("SERVICE_TOKEN"),
+		Addr:           resolveAddr(),
+		DatabaseURL:    os.Getenv("DATABASE_URL"),
+		JWTSecret:      os.Getenv("JWT_SECRET"),
+		ServiceToken:   os.Getenv("SERVICE_TOKEN"),
+		AllowedOrigins: splitList(valueOrDefault("ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")),
 	}
 
 	cfg.CookieSecure = true
@@ -50,6 +53,17 @@ func valueOrDefault(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func splitList(value string) []string {
+	parts := strings.Split(value, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
 }
 
 func resolveAddr() string {

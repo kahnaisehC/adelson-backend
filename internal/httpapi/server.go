@@ -68,6 +68,7 @@ func New(cfg config.Config, db *store.Store, logger *slog.Logger) http.Handler {
 	mux.HandleFunc("PATCH /api/v1/inmuebles/{inmuebleId}/imagenes/{imagenId}", s.notImplemented)
 	mux.HandleFunc("DELETE /api/v1/inmuebles/{inmuebleId}/imagenes/{imagenId}", s.notImplemented)
 	mux.HandleFunc("POST /api/v1/inmuebles/{inmuebleId}/consultas", s.publicInquiry)
+	mux.HandleFunc("POST /api/v1/contacto", s.publicContact)
 
 	mux.HandleFunc("GET /api/v1/clientes", s.clients)
 	mux.HandleFunc("POST /api/v1/clientes", s.clients)
@@ -656,7 +657,7 @@ func (s *Server) inquiries(w http.ResponseWriter, r *http.Request) {
 			writeError(w, r, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "clienteId, inmuebleId y canalOrigen son obligatorios.", nil)
 			return
 		}
-		inquiry, err := s.store.CreateInquiry(r.Context(), input.ClientID, input.PropertyID, input.Channel, input.Notes)
+		inquiry, err := s.store.CreateInquiry(r.Context(), input.ClientID, &input.PropertyID, input.Channel, input.Notes)
 		if err != nil {
 			s.databaseError(w, r, err)
 			return
@@ -676,45 +677,107 @@ func (s *Server) inquiries(w http.ResponseWriter, r *http.Request) {
 	writePaginated(w, r, inquiries, page, pageSize, total)
 }
 
+type publicInquiryRequest struct {
+	FirstName  string  `json:"nombre"`
+	LastName   string  `json:"apellido"`
+	DNI        string  `json:"dni"`
+	Email      string  `json:"correoElectronico"`
+	Phone      string  `json:"numeroTelefono"`
+	Message    string  `json:"mensaje"`
+	PropertyID *string `json:"inmuebleId"`
+}
+
 func (s *Server) publicInquiry(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		FirstName string `json:"nombre"`
-		LastName  string `json:"apellido"`
-		DNI       string `json:"dni"`
-		Email     string `json:"correoElectronico"`
-		Phone     string `json:"numeroTelefono"`
-		Message   string `json:"mensaje"`
-	}
-	if !decodeJSON(w, r, &input) || input.FirstName == "" || input.LastName == "" || input.DNI == "" || input.Email == "" {
-		writeError(w, r, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "Los datos de contacto son obligatorios.", nil)
+	var input publicInquiryRequest
+	if !decodeJSON(w, r, &input) {
 		return
 	}
+	propertyID := r.PathValue("inmuebleId")
+	input.PropertyID = &propertyID
+	s.createPublicInquiry(w, r, input)
+}
+
+func (s *Server) publicContact(w http.ResponseWriter, r *http.Request) {
+	var input publicInquiryRequest
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	s.createPublicInquiry(w, r, input)
+}
+
+func (s *Server) createPublicInquiry(w http.ResponseWriter, r *http.Request, input publicInquiryRequest) {
+	if input.FirstName == "" || input.LastName == "" || input.Email == "" {
+		writeError(w, r, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "nombre, apellido y correoElectronico son obligatorios.", nil)
+		return
+	}
+
+	if input.PropertyID != nil && *input.PropertyID != "" {
+		if !validID(*input.PropertyID) {
+			writeError(w, r, http.StatusNotFound, "NOT_FOUND", "El inmueble no existe.", nil)
+			return
+		}
+		property, err := s.store.GetProperty(r.Context(), *input.PropertyID, false)
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, r, http.StatusNotFound, "NOT_FOUND", "El inmueble no existe.", nil)
+			return
+		}
+		if err != nil {
+			s.databaseError(w, r, err)
+			return
+		}
+		if property.Status == "Oculto" {
+			writeError(w, r, http.StatusNotFound, "NOT_FOUND", "El inmueble no existe.", nil)
+			return
+		}
+	} else {
+		input.PropertyID = nil
+	}
+
+	dni := strings.TrimSpace(input.DNI)
+	if dni == "" {
+		dni = generatedDNI()
+	}
+
 	client, err := s.store.GetClientByEmail(r.Context(), input.Email)
-	created := false
 	if errors.Is(err, store.ErrNotFound) {
 		hash, hashErr := hashPassword("")
 		if hashErr != nil {
 			writeError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "No se pudo registrar el cliente.", nil)
 			return
 		}
-		client, err = s.store.CreateClient(r.Context(), store.ClientInput{FirstName: input.FirstName, LastName: input.LastName, DNI: input.DNI, Email: input.Email, PasswordHash: hash})
-		created = err == nil
+		client, err = s.store.CreateClient(r.Context(), store.ClientInput{FirstName: input.FirstName, LastName: input.LastName, DNI: dni, Email: input.Email, PasswordHash: hash})
 	}
 	if err != nil {
 		s.databaseError(w, r, err)
 		return
 	}
-	if created && input.Phone != "" {
-		if _, err := s.store.CreatePhone(r.Context(), client.ID, input.Phone, true); err != nil {
+
+	if input.Phone != "" {
+		phones, err := s.store.ListPhones(r.Context(), client.ID)
+		if err != nil {
 			s.databaseError(w, r, err)
 			return
 		}
+		exists := false
+		for _, phone := range phones {
+			if phone.Number == input.Phone {
+				exists = true
+				break
+			}
+		}
+		if !exists {
+			if _, err := s.store.CreatePhone(r.Context(), client.ID, input.Phone, true); err != nil {
+				s.databaseError(w, r, err)
+				return
+			}
+		}
 	}
+
 	var notes *string
 	if input.Message != "" {
 		notes = &input.Message
 	}
-	inquiry, err := s.store.CreateInquiry(r.Context(), client.ID, r.PathValue("inmuebleId"), "Portal Web", notes)
+	inquiry, err := s.store.CreateInquiry(r.Context(), client.ID, input.PropertyID, "Portal Web", notes)
 	if err != nil {
 		s.databaseError(w, r, err)
 		return
@@ -1088,6 +1151,14 @@ func randomID() string {
 	bytes[6] = (bytes[6] & 0x0f) | 0x40
 	bytes[8] = (bytes[8] & 0x3f) | 0x80
 	return fmt.Sprintf("%s-%s-%s-%s-%s", hex.EncodeToString(bytes[0:4]), hex.EncodeToString(bytes[4:6]), hex.EncodeToString(bytes[6:8]), hex.EncodeToString(bytes[8:10]), hex.EncodeToString(bytes[10:16]))
+}
+
+func generatedDNI() string {
+	bytes := make([]byte, 8)
+	if _, err := rand.Read(bytes); err != nil {
+		return "WEB-" + hex.EncodeToString([]byte(time.Now().String()))[:16]
+	}
+	return "WEB-" + hex.EncodeToString(bytes)
 }
 
 func writeData(w http.ResponseWriter, r *http.Request, status int, data interface{}) {

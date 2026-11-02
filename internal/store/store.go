@@ -237,7 +237,55 @@ func (s *Store) ListProperties(ctx context.Context, f PropertyFilter) ([]Propert
 	if err := rows.Err(); err != nil {
 		return nil, 0, fmt.Errorf("iterate properties: %w", err)
 	}
+
+	ids := make([]string, 0, len(properties))
+	for _, property := range properties {
+		ids = append(ids, property.ID)
+	}
+	images, err := s.imagesForProperties(ctx, ids)
+	if err != nil {
+		return nil, 0, err
+	}
+	for index := range properties {
+		properties[index].Images = images[properties[index].ID]
+	}
+
 	return properties, total, nil
+}
+
+func (s *Store) imagesForProperties(ctx context.Context, ids []string) (map[string][]Image, error) {
+	result := make(map[string][]Image, len(ids))
+	if len(ids) == 0 {
+		return result, nil
+	}
+
+	placeholders := make([]string, len(ids))
+	args := make([]interface{}, len(ids))
+	for index, id := range ids {
+		placeholders[index] = fmt.Sprintf("$%d", index+1)
+		args[index] = id
+	}
+
+	query := `SELECT id, inmueble_id, url_archivo, orden_visualizacion, es_portada, created_at
+        FROM imagenes WHERE inmueble_id IN (` + strings.Join(placeholders, ", ") + `)
+        ORDER BY es_portada DESC, orden_visualizacion, created_at`
+	rows, err := s.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list property images: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var image Image
+		if err := rows.Scan(&image.ID, &image.PropertyID, &image.FileURL, &image.DisplayOrder, &image.IsCover, &image.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan property image: %w", err)
+		}
+		result[image.PropertyID] = append(result[image.PropertyID], image)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate property images: %w", err)
+	}
+	return result, nil
 }
 
 func (s *Store) GetProperty(ctx context.Context, id string, includeDeleted bool) (Property, error) {
@@ -398,7 +446,7 @@ func (s *Store) ListImages(ctx context.Context, propertyID string) ([]Image, err
 	if s.DB == nil {
 		return nil, errors.New("database is not configured")
 	}
-	rows, err := s.DB.QueryContext(ctx, `SELECT id, inmueble_id, url_archivo, orden_visualizacion, es_portada, created_at FROM imagenes WHERE inmueble_id = $1 ORDER BY orden_visualizacion, created_at`, propertyID)
+	rows, err := s.DB.QueryContext(ctx, `SELECT id, inmueble_id, url_archivo, orden_visualizacion, es_portada, created_at FROM imagenes WHERE inmueble_id = $1 ORDER BY es_portada DESC, orden_visualizacion, created_at`, propertyID)
 	if err != nil {
 		return nil, fmt.Errorf("list images: %w", err)
 	}
@@ -860,7 +908,7 @@ func (s *Store) CreatePreference(ctx context.Context, clientID string, input Pre
 type Inquiry struct {
 	ID             string    `json:"id"`
 	ClientID       string    `json:"clienteId"`
-	PropertyID     string    `json:"inmuebleId"`
+	PropertyID     *string   `json:"inmuebleId,omitempty"`
 	DateTime       time.Time `json:"fechaHora"`
 	OriginChannel  string    `json:"canalOrigen"`
 	FollowUpStatus string    `json:"estadoSeguimiento"`
@@ -868,15 +916,17 @@ type Inquiry struct {
 	UpdatedAt      time.Time `json:"updatedAt"`
 }
 
-func (s *Store) CreateInquiry(ctx context.Context, clientID, propertyID, channel string, notes *string) (Inquiry, error) {
+func (s *Store) CreateInquiry(ctx context.Context, clientID string, propertyID *string, channel string, notes *string) (Inquiry, error) {
 	if s.DB == nil {
 		return Inquiry{}, errors.New("database is not configured")
 	}
 	var inquiry Inquiry
-	err := s.DB.QueryRowContext(ctx, `INSERT INTO consultas (cliente_id, inmueble_id, canal_origen, notas_internas) VALUES ($1, $2, $3, $4) RETURNING id, cliente_id, inmueble_id, fecha_hora, canal_origen, estado_seguimiento, notas_internas, updated_at`, clientID, propertyID, channel, notes).Scan(&inquiry.ID, &inquiry.ClientID, &inquiry.PropertyID, &inquiry.DateTime, &inquiry.OriginChannel, &inquiry.FollowUpStatus, &inquiry.InternalNotes, &inquiry.UpdatedAt)
+	var property sql.NullString
+	err := s.DB.QueryRowContext(ctx, `INSERT INTO consultas (cliente_id, inmueble_id, canal_origen, notas_internas) VALUES ($1, $2, $3, $4) RETURNING id, cliente_id, inmueble_id, fecha_hora, canal_origen, estado_seguimiento, notas_internas, updated_at`, clientID, propertyID, channel, notes).Scan(&inquiry.ID, &inquiry.ClientID, &property, &inquiry.DateTime, &inquiry.OriginChannel, &inquiry.FollowUpStatus, &inquiry.InternalNotes, &inquiry.UpdatedAt)
 	if err != nil {
 		return Inquiry{}, fmt.Errorf("create inquiry: %w", err)
 	}
+	inquiry.PropertyID = stringPtr(property)
 	return inquiry, nil
 }
 
@@ -902,9 +952,11 @@ func (s *Store) ListInquiries(ctx context.Context, page, pageSize int) ([]Inquir
 	result := []Inquiry{}
 	for rows.Next() {
 		var i Inquiry
-		if err := rows.Scan(&i.ID, &i.ClientID, &i.PropertyID, &i.DateTime, &i.OriginChannel, &i.FollowUpStatus, &i.InternalNotes, &i.UpdatedAt); err != nil {
+		var property sql.NullString
+		if err := rows.Scan(&i.ID, &i.ClientID, &property, &i.DateTime, &i.OriginChannel, &i.FollowUpStatus, &i.InternalNotes, &i.UpdatedAt); err != nil {
 			return nil, 0, err
 		}
+		i.PropertyID = stringPtr(property)
 		result = append(result, i)
 	}
 	return result, total, rows.Err()
@@ -915,13 +967,15 @@ func (s *Store) UpdateInquiry(ctx context.Context, id string, status, notes *str
 		return Inquiry{}, errors.New("database is not configured")
 	}
 	var inquiry Inquiry
-	err := s.DB.QueryRowContext(ctx, `UPDATE consultas SET estado_seguimiento = COALESCE($2, estado_seguimiento), notas_internas = COALESCE($3, notas_internas), updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING id, cliente_id, inmueble_id, fecha_hora, canal_origen, estado_seguimiento, notas_internas, updated_at`, id, status, notes).Scan(&inquiry.ID, &inquiry.ClientID, &inquiry.PropertyID, &inquiry.DateTime, &inquiry.OriginChannel, &inquiry.FollowUpStatus, &inquiry.InternalNotes, &inquiry.UpdatedAt)
+	var property sql.NullString
+	err := s.DB.QueryRowContext(ctx, `UPDATE consultas SET estado_seguimiento = COALESCE($2, estado_seguimiento), notas_internas = COALESCE($3, notas_internas), updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING id, cliente_id, inmueble_id, fecha_hora, canal_origen, estado_seguimiento, notas_internas, updated_at`, id, status, notes).Scan(&inquiry.ID, &inquiry.ClientID, &property, &inquiry.DateTime, &inquiry.OriginChannel, &inquiry.FollowUpStatus, &inquiry.InternalNotes, &inquiry.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Inquiry{}, ErrNotFound
 	}
 	if err != nil {
 		return Inquiry{}, err
 	}
+	inquiry.PropertyID = stringPtr(property)
 	return inquiry, nil
 }
 

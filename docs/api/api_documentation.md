@@ -154,7 +154,7 @@ La API conserva los valores del esquema para evitar traducciones ambiguas.
 | `estadoSeguimiento` | `Pendiente`, `Contactado`, `Visita Agendada`, `Descartado`, `Cerrado` |
 | `estadoSesion` | `Atendida por IA`, `Esperando Humano`, `Atendida por Humano`, `Cerrada` |
 | `tipoOperacion` | `Venta`, `Alquiler`, `Alquiler Temporario` |
-| `tipoInmueble` | `Casa`, `Departamento`, `Terreno`, `Local Comercial`, `Galpón` |
+| `tipoInmueble` | `Casa`, `Departamento`, `Terreno`, `Local Comercial`, `Galpón`, `Campo` |
 | `estado` | `Disponible`, `Reservado`, `Vendido`, `Alquilado`, `Oculto` |
 | `moneda` | `Pesos`, `Dólares` |
 
@@ -288,6 +288,8 @@ GET /api/v1/inmuebles?tipoOperacion=Alquiler&tipoInmueble=Departamento&moneda=D�
 ```
 
 Las consultas combinadas se implementan con parámetros preparados. `precioMin` y `precioMax` deben interpretarse en la misma moneda; si se envía un rango de precio sin `moneda`, la API responde `422`.
+
+Cada elemento de `data` en `GET /inmuebles` incluye `imagenes` ordenadas con la portada primero, para que el listado público pueda mostrar la foto principal sin solicitudes adicionales.
 
 ### Crear inmueble
 
@@ -521,6 +523,7 @@ La tabla `consultas` relaciona clientes e inmuebles y registra el canal y estado
 | `GET` | `/consultas` | Agente/Administrador | Lista consultas con filtros. |
 | `POST` | `/consultas` | Agente/Administrador/Servicio IA | Registra una consulta con un cliente existente. |
 | `POST` | `/inmuebles/{inmuebleId}/consultas` | Público | Registra una consulta desde el portal. |
+| `POST` | `/contacto` | Público | Registra una consulta general, con o sin inmueble asociado. |
 | `GET` | `/consultas/{consultaId}` | Agente/Administrador | Consulta el detalle. |
 | `PATCH` | `/consultas/{consultaId}` | Agente/Administrador | Actualiza estado y notas internas. |
 
@@ -556,7 +559,24 @@ La tabla `consultas` relaciona clientes e inmuebles y registra el canal y estado
 }
 ```
 
-El servicio crea o encuentra el cliente de forma segura, registra `canalOrigen: "Portal Web"` y no permite que el público escriba `notasInternas` ni modifique el estado. La columna `personas.dni` es obligatoria en el esquema actual; si el formulario público no debe solicitar DNI, se necesita una entidad de leads separada o una migración antes de implementar este contrato.
+El servicio crea o encuentra el cliente de forma segura, registra `canalOrigen: "Portal Web"` y no permite que el público escriba `notasInternas` ni modifique el estado. `dni` es opcional: si no se envía, la API genera un identificador único con el prefijo `WEB-` para cumplir la restricción de `personas.dni`.
+
+### Consulta general
+
+`POST /contacto`
+
+```json
+{
+  "nombre": "María",
+  "apellido": "Gómez",
+  "correoElectronico": "maria@example.com",
+  "numeroTelefono": "+5493492123456",
+  "mensaje": "Quisiera recibir información sobre tasaciones.",
+  "inmuebleId": "3e5d8a7a-5c6e-43ce-978e-8ef3c1c5375a"
+}
+```
+
+`inmuebleId` es opcional. Si se envía, el inmueble debe existir y no estar oculto. El registro se guarda en `consultas` con `inmuebleId: null` cuando no se asocia una propiedad.
 
 ### Actualizar consulta
 

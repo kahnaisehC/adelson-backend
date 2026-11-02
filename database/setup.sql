@@ -13,7 +13,7 @@ CREATE TYPE estado_sesion_enum AS ENUM ('Atendida por IA', 'Esperando Humano', '
 
 -- ENUMs para el Catálogo de Inmuebles
 CREATE TYPE tipo_operacion_enum AS ENUM ('Venta', 'Alquiler', 'Alquiler Temporario');
-CREATE TYPE tipo_inmueble_enum AS ENUM ('Casa', 'Departamento', 'Terreno', 'Local Comercial', 'Galpón');
+CREATE TYPE tipo_inmueble_enum AS ENUM ('Casa', 'Departamento', 'Terreno', 'Local Comercial', 'Galpón', 'Campo');
 CREATE TYPE estado_inmueble_enum AS ENUM ('Disponible', 'Reservado', 'Vendido', 'Alquilado', 'Oculto');
 CREATE TYPE moneda_enum AS ENUM ('Pesos', 'Dólares');
 
@@ -130,7 +130,7 @@ CREATE TABLE preferencias_busquedas (
 CREATE TABLE consultas (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     cliente_id UUID NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
-    inmueble_id UUID NOT NULL REFERENCES inmuebles(id) ON DELETE CASCADE,
+    inmueble_id UUID REFERENCES inmuebles(id) ON DELETE CASCADE,
     fecha_hora TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     canal_origen canal_origen_enum NOT NULL,
     estado_seguimiento estado_seguimiento_enum DEFAULT 'Pendiente',
