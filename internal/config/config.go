@@ -10,6 +10,8 @@ import (
 	"github.com/joho/godotenv"
 )
 
+const productionWorkerOrigin = "https://inmobiliariafront.joaquinr-val.workers.dev"
+
 type Config struct {
 	Addr           string
 	DatabaseURL    string
@@ -24,12 +26,17 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("load .env: %w", err)
 	}
 
+	allowedOrigins := splitList(valueOrDefault("ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"))
+	if !containsOrigin(allowedOrigins, productionWorkerOrigin) {
+		allowedOrigins = append(allowedOrigins, productionWorkerOrigin)
+	}
+
 	cfg := Config{
 		Addr:           resolveAddr(),
 		DatabaseURL:    os.Getenv("DATABASE_URL"),
 		JWTSecret:      os.Getenv("JWT_SECRET"),
 		ServiceToken:   os.Getenv("SERVICE_TOKEN"),
-		AllowedOrigins: splitList(valueOrDefault("ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")),
+		AllowedOrigins: allowedOrigins,
 	}
 
 	cfg.CookieSecure = true
@@ -64,6 +71,15 @@ func splitList(value string) []string {
 		}
 	}
 	return result
+}
+
+func containsOrigin(origins []string, target string) bool {
+	for _, origin := range origins {
+		if origin == target {
+			return true
+		}
+	}
+	return false
 }
 
 func resolveAddr() string {
