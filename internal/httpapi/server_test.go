@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"adelson-backend/internal/config"
 	"adelson-backend/internal/store"
@@ -58,6 +59,60 @@ func TestRefreshRequiresRefreshCookie(t *testing.T) {
 
 	if response.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", response.Code)
+	}
+}
+
+func TestClientIPIgnoresSpoofedCloudflareHeader(t *testing.T) {
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", nil)
+	request.RemoteAddr = "192.0.2.10:4321"
+	request.Header.Set("CF-Connecting-IP", "203.0.113.9")
+
+	if got := clientIP(request); got != "192.0.2.10" {
+		t.Fatalf("expected remote address, got %q", got)
+	}
+
+	request.Header.Set("X-Forwarded-For", "198.51.100.7, 10.0.0.1")
+	if got := clientIP(request); got != "198.51.100.7" {
+		t.Fatalf("expected forwarded address, got %q", got)
+	}
+
+	request.Header.Set("X-Forwarded-For", "not-an-ip")
+	if got := clientIP(request); got != "192.0.2.10" {
+		t.Fatalf("expected fallback to remote address, got %q", got)
+	}
+}
+
+func TestAttemptLimiterBlocksAfterMax(t *testing.T) {
+	limiter := newAttemptLimiter(2, time.Minute)
+	const key = "account|admin@example.com"
+
+	if !limiter.allow(key) {
+		t.Fatal("expected first attempt to be allowed")
+	}
+	limiter.add(key)
+	if !limiter.allow(key) {
+		t.Fatal("expected second attempt to be allowed")
+	}
+	limiter.add(key)
+	if limiter.allow(key) {
+		t.Fatal("expected third attempt to be blocked")
+	}
+	if !limiter.allow("account|other@example.com") {
+		t.Fatal("expected other keys to remain allowed")
+	}
+}
+
+func TestAttemptLimiterWindowExpires(t *testing.T) {
+	limiter := newAttemptLimiter(1, 20*time.Millisecond)
+	const key = "account|admin@example.com"
+
+	limiter.add(key)
+	if limiter.allow(key) {
+		t.Fatal("expected key to be blocked within window")
+	}
+	time.Sleep(30 * time.Millisecond)
+	if !limiter.allow(key) {
+		t.Fatal("expected key to be allowed after window")
 	}
 }
 

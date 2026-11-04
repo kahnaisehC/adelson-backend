@@ -22,11 +22,12 @@ import (
 )
 
 type Server struct {
-	config  config.Config
-	store   *store.Store
-	log     *slog.Logger
-	r2      *storage.R2
-	limiter *attemptLimiter
+	config         config.Config
+	store          *store.Store
+	log            *slog.Logger
+	r2             *storage.R2
+	limiter        *attemptLimiter
+	accountLimiter *attemptLimiter
 }
 
 type contextKey string
@@ -50,7 +51,14 @@ func New(cfg config.Config, db *store.Store, logger *slog.Logger) http.Handler {
 	if err != nil {
 		logger.Error("configure r2", "error", err)
 	}
-	s := &Server{config: cfg, store: db, log: logger, r2: r2, limiter: newAttemptLimiter()}
+	s := &Server{
+		config:         cfg,
+		store:          db,
+		log:            logger,
+		r2:             r2,
+		limiter:        newAttemptLimiter(5, 15*time.Minute),
+		accountLimiter: newAttemptLimiter(10, 15*time.Minute),
+	}
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", s.health)

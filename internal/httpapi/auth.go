@@ -21,16 +21,18 @@ const (
 type attemptLimiter struct {
 	mu       sync.Mutex
 	attempts map[string][]time.Time
+	max      int
+	window   time.Duration
 }
 
-func newAttemptLimiter() *attemptLimiter {
-	return &attemptLimiter{attempts: map[string][]time.Time{}}
+func newAttemptLimiter(max int, window time.Duration) *attemptLimiter {
+	return &attemptLimiter{attempts: map[string][]time.Time{}, max: max, window: window}
 }
 
 func (l *attemptLimiter) allow(key string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	cutoff := time.Now().Add(-15 * time.Minute)
+	cutoff := time.Now().Add(-l.window)
 	recent := l.attempts[key][:0]
 	for _, attempt := range l.attempts[key] {
 		if attempt.After(cutoff) {
@@ -38,7 +40,7 @@ func (l *attemptLimiter) allow(key string) bool {
 		}
 	}
 	l.attempts[key] = recent
-	return len(recent) < 5
+	return len(recent) < l.max
 }
 
 func (l *attemptLimiter) add(key string) {
@@ -53,6 +55,11 @@ func (l *attemptLimiter) reset(key string) {
 	delete(l.attempts, key)
 }
 
+var dummyPasswordHash = sync.OnceValue(func() []byte {
+	hash, _ := bcrypt.GenerateFromPassword([]byte("adelson-login-timing-equalizer"), bcrypt.DefaultCost)
+	return hash
+})
+
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Email    string `json:"correoElectronico"`
@@ -66,19 +73,32 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "La base de datos no está configurada.", nil)
 		return
 	}
-	key := clientIP(r) + "|" + strings.ToLower(input.Email)
-	if !s.limiter.allow(key) {
+	email := strings.ToLower(strings.TrimSpace(input.Email))
+	ipKey := clientIP(r) + "|" + email
+	accountKey := "account|" + email
+	if !s.limiter.allow(ipKey) || !s.accountLimiter.allow(accountKey) {
+		w.Header().Set("Retry-After", "900")
 		writeError(w, r, http.StatusTooManyRequests, "TOO_MANY_ATTEMPTS", "Demasiados intentos. Espere unos minutos.", nil)
 		return
 	}
 
-	user, err := s.store.GetAuthUserByEmail(r.Context(), input.Email)
-	if err != nil || bcrypt.CompareHashAndPassword([]byte(user.Hash), []byte(input.Password)) != nil || user.Operational != "Activo" {
-		s.limiter.add(key)
+	user, err := s.store.GetAuthUserByEmail(r.Context(), email)
+	passwordOK := false
+	if err == nil {
+		passwordOK = bcrypt.CompareHashAndPassword([]byte(user.Hash), []byte(input.Password)) == nil
+	} else {
+		_ = bcrypt.CompareHashAndPassword(dummyPasswordHash(), []byte(input.Password))
+	}
+	if err != nil || !passwordOK || user.Operational != "Activo" {
+		s.limiter.add(ipKey)
+		s.accountLimiter.add(accountKey)
+		s.log.Warn("login failed", "email", email, "ip", clientIP(r))
 		writeError(w, r, http.StatusUnauthorized, "UNAUTHENTICATED", "Las credenciales no son válidas.", nil)
 		return
 	}
-	s.limiter.reset(key)
+	s.limiter.reset(ipKey)
+	s.accountLimiter.reset(accountKey)
+	w.Header().Set("Cache-Control", "no-store")
 	if _, err := s.store.DB.ExecContext(r.Context(), `UPDATE usuarios SET ultimo_acceso = CURRENT_TIMESTAMP WHERE id = $1`, user.ID); err != nil {
 		s.log.Error("update last access", "error", err)
 	}
@@ -148,6 +168,7 @@ func (s *Server) refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.setRefreshCookie(w, newRefresh, int(refreshTokenTTL.Seconds()))
+	w.Header().Set("Cache-Control", "no-store")
 	writeData(w, r, http.StatusOK, map[string]interface{}{"accessToken": access, "tokenType": "Bearer", "expiresIn": int(accessTokenTTL.Seconds())})
 }
 
@@ -260,11 +281,11 @@ func (s *Server) setRefreshCookie(w http.ResponseWriter, value string, maxAge in
 }
 
 func clientIP(r *http.Request) string {
-	if forwarded := r.Header.Get("CF-Connecting-IP"); forwarded != "" {
-		return forwarded
-	}
 	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-		return strings.TrimSpace(strings.Split(forwarded, ",")[0])
+		first := strings.TrimSpace(strings.Split(forwarded, ",")[0])
+		if net.ParseIP(first) != nil {
+			return first
+		}
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err == nil {
