@@ -71,6 +71,7 @@ type Image struct {
 	ID           string    `json:"id"`
 	PropertyID   string    `json:"inmuebleId"`
 	FileURL      string    `json:"urlArchivo"`
+	StorageKey   *string   `json:"storageKey,omitempty"`
 	DisplayOrder int       `json:"ordenVisualizacion"`
 	IsCover      bool      `json:"esPortada"`
 	CreatedAt    time.Time `json:"createdAt"`
@@ -266,7 +267,7 @@ func (s *Store) imagesForProperties(ctx context.Context, ids []string) (map[stri
 		args[index] = id
 	}
 
-	query := `SELECT id, inmueble_id, url_archivo, orden_visualizacion, es_portada, created_at
+	query := `SELECT id, inmueble_id, url_archivo, storage_key, orden_visualizacion, es_portada, created_at
         FROM imagenes WHERE inmueble_id IN (` + strings.Join(placeholders, ", ") + `)
         ORDER BY es_portada DESC, orden_visualizacion, created_at`
 	rows, err := s.DB.QueryContext(ctx, query, args...)
@@ -277,9 +278,11 @@ func (s *Store) imagesForProperties(ctx context.Context, ids []string) (map[stri
 
 	for rows.Next() {
 		var image Image
-		if err := rows.Scan(&image.ID, &image.PropertyID, &image.FileURL, &image.DisplayOrder, &image.IsCover, &image.CreatedAt); err != nil {
+		var storageKey sql.NullString
+		if err := rows.Scan(&image.ID, &image.PropertyID, &image.FileURL, &storageKey, &image.DisplayOrder, &image.IsCover, &image.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan property image: %w", err)
 		}
+		image.StorageKey = stringPtr(storageKey)
 		result[image.PropertyID] = append(result[image.PropertyID], image)
 	}
 	if err := rows.Err(); err != nil {
@@ -446,7 +449,7 @@ func (s *Store) ListImages(ctx context.Context, propertyID string) ([]Image, err
 	if s.DB == nil {
 		return nil, errors.New("database is not configured")
 	}
-	rows, err := s.DB.QueryContext(ctx, `SELECT id, inmueble_id, url_archivo, orden_visualizacion, es_portada, created_at FROM imagenes WHERE inmueble_id = $1 ORDER BY es_portada DESC, orden_visualizacion, created_at`, propertyID)
+	rows, err := s.DB.QueryContext(ctx, `SELECT id, inmueble_id, url_archivo, storage_key, orden_visualizacion, es_portada, created_at FROM imagenes WHERE inmueble_id = $1 ORDER BY es_portada DESC, orden_visualizacion, created_at`, propertyID)
 	if err != nil {
 		return nil, fmt.Errorf("list images: %w", err)
 	}
@@ -454,9 +457,11 @@ func (s *Store) ListImages(ctx context.Context, propertyID string) ([]Image, err
 	images := []Image{}
 	for rows.Next() {
 		var image Image
-		if err := rows.Scan(&image.ID, &image.PropertyID, &image.FileURL, &image.DisplayOrder, &image.IsCover, &image.CreatedAt); err != nil {
+		var storageKey sql.NullString
+		if err := rows.Scan(&image.ID, &image.PropertyID, &image.FileURL, &storageKey, &image.DisplayOrder, &image.IsCover, &image.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan image: %w", err)
 		}
+		image.StorageKey = stringPtr(storageKey)
 		images = append(images, image)
 	}
 	return images, rows.Err()
@@ -477,7 +482,12 @@ func (s *Store) AddImage(ctx context.Context, propertyID string, image Image) (I
 		}
 	}
 	var result Image
-	err = tx.QueryRowContext(ctx, `INSERT INTO imagenes (inmueble_id, url_archivo, orden_visualizacion, es_portada) VALUES ($1, $2, COALESCE(NULLIF($3, 0), 1), $4) RETURNING id, inmueble_id, url_archivo, orden_visualizacion, es_portada, created_at`, propertyID, image.FileURL, image.DisplayOrder, image.IsCover).Scan(&result.ID, &result.PropertyID, &result.FileURL, &result.DisplayOrder, &result.IsCover, &result.CreatedAt)
+	var storageKey sql.NullString
+	err = tx.QueryRowContext(ctx, `INSERT INTO imagenes (inmueble_id, url_archivo, storage_key, orden_visualizacion, es_portada) VALUES ($1, $2, $3, COALESCE(NULLIF($4, 0), 1), $5) RETURNING id, inmueble_id, url_archivo, storage_key, orden_visualizacion, es_portada, created_at`, propertyID, image.FileURL, image.StorageKey, image.DisplayOrder, image.IsCover).Scan(&result.ID, &result.PropertyID, &result.FileURL, &storageKey, &result.DisplayOrder, &result.IsCover, &result.CreatedAt)
+	if err != nil {
+		return Image{}, fmt.Errorf("add image: %w", err)
+	}
+	result.StorageKey = stringPtr(storageKey)
 	if err != nil {
 		return Image{}, fmt.Errorf("add image: %w", err)
 	}
@@ -922,7 +932,7 @@ func (s *Store) CreateInquiry(ctx context.Context, clientID string, propertyID *
 	}
 	var inquiry Inquiry
 	var property sql.NullString
-	err := s.DB.QueryRowContext(ctx, `INSERT INTO consultas (cliente_id, inmueble_id, canal_origen, notas_internas) VALUES ($1, $2, $3, $4) RETURNING id, cliente_id, inmueble_id, fecha_hora, canal_origen, estado_seguimiento, notas_internas, updated_at`, clientID, propertyID, channel, notes).Scan(&inquiry.ID, &inquiry.ClientID, &property, &inquiry.DateTime, &inquiry.OriginChannel, &inquiry.FollowUpStatus, &inquiry.InternalNotes, &inquiry.UpdatedAt)
+	err := s.DB.QueryRowContext(ctx, `INSERT INTO consultas (cliente_id, inmueble_id, agente_asignado_id, canal_origen, notas_internas) VALUES ($1, $2, (SELECT agente_id FROM inmuebles WHERE id = $2), $3, $4) RETURNING id, cliente_id, inmueble_id, fecha_hora, canal_origen, estado_seguimiento, notas_internas, updated_at`, clientID, propertyID, channel, notes).Scan(&inquiry.ID, &inquiry.ClientID, &property, &inquiry.DateTime, &inquiry.OriginChannel, &inquiry.FollowUpStatus, &inquiry.InternalNotes, &inquiry.UpdatedAt)
 	if err != nil {
 		return Inquiry{}, fmt.Errorf("create inquiry: %w", err)
 	}

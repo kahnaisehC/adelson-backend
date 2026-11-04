@@ -15,15 +15,18 @@ import (
 	"time"
 
 	"adelson-backend/internal/config"
+	"adelson-backend/internal/storage"
 	"adelson-backend/internal/store"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type Server struct {
-	config config.Config
-	store  *store.Store
-	log    *slog.Logger
+	config  config.Config
+	store   *store.Store
+	log     *slog.Logger
+	r2      *storage.R2
+	limiter *attemptLimiter
 }
 
 type contextKey string
@@ -43,7 +46,11 @@ func New(cfg config.Config, db *store.Store, logger *slog.Logger) http.Handler {
 	if db == nil {
 		db = &store.Store{}
 	}
-	s := &Server{config: cfg, store: db, log: logger}
+	r2, err := storage.NewR2(cfg)
+	if err != nil {
+		logger.Error("configure r2", "error", err)
+	}
+	s := &Server{config: cfg, store: db, log: logger, r2: r2, limiter: newAttemptLimiter()}
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", s.health)
@@ -54,19 +61,21 @@ func New(cfg config.Config, db *store.Store, logger *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /api/v1/auth/me", s.me)
 	mux.HandleFunc("GET /api/v1/usuarios", s.users)
 	mux.HandleFunc("POST /api/v1/usuarios", s.users)
+	mux.HandleFunc("GET /api/v1/usuarios/agentes", s.agents)
 	mux.HandleFunc("GET /api/v1/usuarios/{usuarioId}", s.user)
 	mux.HandleFunc("PATCH /api/v1/usuarios/{usuarioId}", s.user)
+	mux.HandleFunc("DELETE /api/v1/usuarios/{usuarioId}", s.notImplemented)
 
 	mux.HandleFunc("GET /api/v1/inmuebles", s.properties)
 	mux.HandleFunc("POST /api/v1/inmuebles", s.properties)
 	mux.HandleFunc("GET /api/v1/inmuebles/{inmuebleId}", s.property)
 	mux.HandleFunc("PATCH /api/v1/inmuebles/{inmuebleId}", s.property)
 	mux.HandleFunc("DELETE /api/v1/inmuebles/{inmuebleId}", s.property)
-	mux.HandleFunc("POST /api/v1/inmuebles/{inmuebleId}/restaurar", s.notImplemented)
+	mux.HandleFunc("POST /api/v1/inmuebles/{inmuebleId}/restaurar", s.restoreProperty)
 	mux.HandleFunc("GET /api/v1/inmuebles/{inmuebleId}/imagenes", s.images)
 	mux.HandleFunc("POST /api/v1/inmuebles/{inmuebleId}/imagenes", s.images)
-	mux.HandleFunc("PATCH /api/v1/inmuebles/{inmuebleId}/imagenes/{imagenId}", s.notImplemented)
-	mux.HandleFunc("DELETE /api/v1/inmuebles/{inmuebleId}/imagenes/{imagenId}", s.notImplemented)
+	mux.HandleFunc("PATCH /api/v1/inmuebles/{inmuebleId}/imagenes/{imagenId}", s.image)
+	mux.HandleFunc("DELETE /api/v1/inmuebles/{inmuebleId}/imagenes/{imagenId}", s.image)
 	mux.HandleFunc("POST /api/v1/inmuebles/{inmuebleId}/consultas", s.publicInquiry)
 	mux.HandleFunc("POST /api/v1/contacto", s.publicContact)
 
@@ -90,8 +99,10 @@ func New(cfg config.Config, db *store.Store, logger *slog.Logger) http.Handler {
 
 	mux.HandleFunc("GET /api/v1/consultas", s.inquiries)
 	mux.HandleFunc("POST /api/v1/consultas", s.inquiries)
-	mux.HandleFunc("GET /api/v1/consultas/{consultaId}", s.notImplemented)
+	mux.HandleFunc("GET /api/v1/consultas/{consultaId}", s.inquiry)
 	mux.HandleFunc("PATCH /api/v1/consultas/{consultaId}", s.updateInquiry)
+	mux.HandleFunc("GET /api/v1/dashboard", s.dashboard)
+	mux.HandleFunc("POST /api/v1/uploads/presign", s.presignUpload)
 
 	mux.HandleFunc("GET /api/v1/sesiones-chat", s.sessions)
 	mux.HandleFunc("POST /api/v1/sesiones-chat", s.sessions)
@@ -121,99 +132,6 @@ func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeData(w, r, http.StatusOK, map[string]string{"status": "ready"})
-}
-
-func (s *Server) login(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Email    string `json:"correoElectronico"`
-		Password string `json:"contrasena"`
-	}
-	if !decodeJSON(w, r, &input) || input.Email == "" || input.Password == "" {
-		writeError(w, r, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "Correo y contraseña son obligatorios.", nil)
-		return
-	}
-	if s.store == nil || s.store.DB == nil {
-		writeError(w, r, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "La base de datos no está configurada.", nil)
-		return
-	}
-	var user struct {
-		ID       string
-		Name     string
-		LastName string
-		Email    string
-		Hash     string
-		Role     string
-		Status   string
-	}
-	err := s.store.DB.QueryRowContext(r.Context(), `SELECT p.id, p.nombre, p.apellido, p.correo_electronico, p.contrasena_hash, u.rol, u.estado_operativo FROM personas p JOIN usuarios u ON u.id = p.id WHERE lower(p.correo_electronico) = lower($1) AND p.deleted_at IS NULL`, input.Email).Scan(&user.ID, &user.Name, &user.LastName, &user.Email, &user.Hash, &user.Role, &user.Status)
-	if err != nil || bcrypt.CompareHashAndPassword([]byte(user.Hash), []byte(input.Password)) != nil || user.Status != "Activo" {
-		writeError(w, r, http.StatusUnauthorized, "UNAUTHENTICATED", "Las credenciales no son válidas.", nil)
-		return
-	}
-	if _, err := s.store.DB.ExecContext(r.Context(), `UPDATE usuarios SET ultimo_acceso = CURRENT_TIMESTAMP WHERE id = $1`, user.ID); err != nil {
-		s.log.Error("update last access", "error", err)
-	}
-	token, err := s.issueToken(user.ID, user.Role, "access", 15*time.Minute)
-	if err != nil {
-		writeError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "No se pudo crear la sesión.", nil)
-		return
-	}
-	refresh, err := s.issueToken(user.ID, user.Role, "refresh", 7*24*time.Hour)
-	if err != nil {
-		writeError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "No se pudo crear la sesión.", nil)
-		return
-	}
-	http.SetCookie(w, &http.Cookie{Name: "refresh_token", Value: refresh, Path: "/api/v1/auth", MaxAge: 7 * 24 * 60 * 60, HttpOnly: true, Secure: s.config.CookieSecure, SameSite: http.SameSiteLaxMode})
-	writeData(w, r, http.StatusOK, map[string]interface{}{
-		"accessToken": token,
-		"tokenType":   "Bearer",
-		"expiresIn":   900,
-		"usuario": map[string]string{
-			"id": user.ID, "nombre": user.Name, "apellido": user.LastName,
-			"correoElectronico": user.Email, "rol": user.Role, "estadoOperativo": user.Status,
-		},
-	})
-}
-
-func (s *Server) refresh(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie("refresh_token")
-	if err != nil {
-		writeError(w, r, http.StatusUnauthorized, "UNAUTHENTICATED", "Se requiere un refresh token válido.", nil)
-		return
-	}
-	current, ok := s.parseToken(cookie.Value, "refresh")
-	if !ok {
-		writeError(w, r, http.StatusUnauthorized, "UNAUTHENTICATED", "Se requiere un refresh token válido.", nil)
-		return
-	}
-	token, err := s.issueToken(current.Subject, current.Role, "access", 15*time.Minute)
-	if err != nil {
-		writeError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "No se pudo renovar la sesión.", nil)
-		return
-	}
-	newRefresh, err := s.issueToken(current.Subject, current.Role, "refresh", 7*24*time.Hour)
-	if err != nil {
-		writeError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "No se pudo renovar la sesión.", nil)
-		return
-	}
-	http.SetCookie(w, &http.Cookie{Name: "refresh_token", Value: newRefresh, Path: "/api/v1/auth", MaxAge: 7 * 24 * 60 * 60, HttpOnly: true, Secure: s.config.CookieSecure, SameSite: http.SameSiteLaxMode})
-	writeData(w, r, http.StatusOK, map[string]interface{}{"accessToken": token, "tokenType": "Bearer", "expiresIn": 900})
-}
-
-func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.require(w, r); !ok {
-		return
-	}
-	http.SetCookie(w, &http.Cookie{Name: "refresh_token", Value: "", Path: "/api/v1/auth", MaxAge: -1, HttpOnly: true, Secure: s.config.CookieSecure, SameSite: http.SameSiteLaxMode})
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (s *Server) me(w http.ResponseWriter, r *http.Request) {
-	current, ok := s.require(w, r)
-	if !ok {
-		return
-	}
-	writeData(w, r, http.StatusOK, map[string]string{"id": current.Subject, "rol": current.Role})
 }
 
 func (s *Server) users(w http.ResponseWriter, r *http.Request) {
@@ -273,84 +191,96 @@ func (s *Server) user(w http.ResponseWriter, r *http.Request) {
 		}
 		writeData(w, r, http.StatusOK, user)
 	case http.MethodPatch:
+		target, err := s.store.GetUser(r.Context(), id)
+		if err != nil {
+			s.databaseError(w, r, err)
+			return
+		}
 		var fields map[string]interface{}
 		if !decodeJSON(w, r, &fields) {
 			return
 		}
+		password := ""
+		if raw, exists := fields["contrasena"]; exists {
+			value, ok := raw.(string)
+			if !ok || len(strings.TrimSpace(value)) < 8 {
+				writeError(w, r, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "contrasena debe tener al menos 8 caracteres.", nil)
+				return
+			}
+			password = value
+			delete(fields, "contrasena")
+		}
 		if current.Role != "Administrador" {
-			delete(fields, "rol")
-			delete(fields, "estadoOperativo")
+			for _, field := range []string{"rol", "estadoOperativo", "correoElectronico"} {
+				delete(fields, field)
+			}
+		} else {
+			if raw, exists := fields["rol"]; exists {
+				role, ok := raw.(string)
+				if !ok || (role != "Agente" && role != "Administrador") {
+					writeError(w, r, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "rol debe ser Agente o Administrador.", nil)
+					return
+				}
+			}
+			if raw, exists := fields["estadoOperativo"]; exists {
+				status, ok := raw.(string)
+				if !ok || (status != "Activo" && status != "Inactivo" && status != "Suspendido") {
+					writeError(w, r, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "estadoOperativo no es válido.", nil)
+					return
+				}
+			}
+			nextRole, _ := fields["rol"].(string)
+			nextStatus, _ := fields["estadoOperativo"].(string)
+			losingAdmin := target.Role == "Administrador" && ((nextRole != "" && nextRole != "Administrador") || (nextStatus != "" && nextStatus != "Activo"))
+			if losingAdmin {
+				admins, err := s.store.CountActiveAdmins(r.Context())
+				if err != nil {
+					s.databaseError(w, r, err)
+					return
+				}
+				if admins <= 1 {
+					writeError(w, r, http.StatusConflict, "LAST_ADMIN", "No se puede desactivar al último administrador activo.", nil)
+					return
+				}
+			}
+		}
+		if id == current.Subject {
+			if raw, exists := fields["estadoOperativo"]; exists && raw != "Activo" {
+				writeError(w, r, http.StatusConflict, "SELF_DEACTIVATION", "No puede desactivar su propia cuenta.", nil)
+				return
+			}
 		}
 		user, err := s.store.UpdateUser(r.Context(), id, fields)
 		if err != nil {
 			s.databaseError(w, r, err)
 			return
 		}
+		if password != "" {
+			hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+			if err != nil {
+				writeError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "No se pudo proteger la contraseña.", nil)
+				return
+			}
+			if err := s.store.UpdatePassword(r.Context(), id, string(hash)); err != nil {
+				s.databaseError(w, r, err)
+				return
+			}
+			_ = s.store.RevokeUserSessions(r.Context(), id)
+		}
+		if _, changedRole := fields["rol"]; changedRole {
+			_ = s.store.RevokeUserSessions(r.Context(), id)
+		}
+		if _, changedStatus := fields["estadoOperativo"]; changedStatus {
+			_ = s.store.RevokeUserSessions(r.Context(), id)
+		}
 		writeData(w, r, http.StatusOK, user)
 	}
 }
 
-func (s *Server) issueToken(subject, role, tokenType string, duration time.Duration) (string, error) {
-	now := time.Now()
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims{Role: role, TokenType: tokenType, RegisteredClaims: jwt.RegisteredClaims{
-		Subject: subject, Issuer: "adelson-api", IssuedAt: jwt.NewNumericDate(now), ExpiresAt: jwt.NewNumericDate(now.Add(duration)), ID: randomID(),
-	}})
-	return token.SignedString([]byte(s.config.JWTSecret))
-}
-
-func (s *Server) authenticate(r *http.Request) (claims, bool) {
-	header := r.Header.Get("Authorization")
-	if !strings.HasPrefix(header, "Bearer ") {
-		return claims{}, false
-	}
-	return s.parseToken(strings.TrimPrefix(header, "Bearer "), "access")
-}
-
-func (s *Server) parseToken(raw, expectedType string) (claims, bool) {
-	token, err := jwt.ParseWithClaims(raw, &claims{}, func(token *jwt.Token) (interface{}, error) {
-		if token.Method != jwt.SigningMethodHS256 {
-			return nil, errors.New("unexpected signing method")
-		}
-		return []byte(s.config.JWTSecret), nil
-	})
-	if err != nil || !token.Valid {
-		return claims{}, false
-	}
-	parsed, ok := token.Claims.(*claims)
-	if !ok || parsed.TokenType != expectedType {
-		return claims{}, false
-	}
-	return *parsed, true
-}
-
-func (s *Server) require(w http.ResponseWriter, r *http.Request, roles ...string) (claims, bool) {
-	if token := r.Header.Get("X-Service-Token"); token != "" && s.config.ServiceToken != "" && token == s.config.ServiceToken {
-		for _, role := range roles {
-			if role == "Servicio" {
-				return claims{Role: "Servicio", TokenType: "service"}, true
-			}
-		}
-	}
-	current, ok := s.authenticate(r)
-	if !ok {
-		writeError(w, r, http.StatusUnauthorized, "UNAUTHENTICATED", "Se requiere autenticación.", nil)
-		return claims{}, false
-	}
-	if len(roles) == 0 {
-		return current, true
-	}
-	for _, role := range roles {
-		if current.Role == role {
-			return current, true
-		}
-	}
-	writeError(w, r, http.StatusForbidden, "FORBIDDEN", "El rol no tiene permiso para esta operación.", nil)
-	return claims{}, false
-}
-
 func (s *Server) properties(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
-		if _, ok := s.require(w, r, "Agente", "Administrador"); !ok {
+		current, ok := s.require(w, r, "Agente", "Administrador")
+		if !ok {
 			return
 		}
 		var input propertyRequest
@@ -360,6 +290,11 @@ func (s *Server) properties(w http.ResponseWriter, r *http.Request) {
 		if err := input.validate(); err != nil {
 			writeError(w, r, http.StatusUnprocessableEntity, "VALIDATION_ERROR", err.Error(), nil)
 			return
+		}
+		if current.Role == "Agente" {
+			input.AgentID = current.Subject
+		} else if input.AgentID == "" {
+			input.AgentID = current.Subject
 		}
 		property, err := s.store.CreateProperty(r.Context(), input.toStore())
 		if err != nil {
@@ -375,8 +310,12 @@ func (s *Server) properties(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, "VALIDATION_ERROR", err.Error(), nil)
 		return
 	}
-	if _, ok := s.authenticate(r); !ok {
+	current, authenticated := s.requireActive(w, r)
+	if !authenticated {
 		filter.Status = "Disponible"
+		filter.IncludeDeleted = false
+	} else if current.Role == "Agente" {
+		filter.AgentID = current.Subject
 		filter.IncludeDeleted = false
 	}
 	properties, total, err := s.store.ListProperties(r.Context(), filter)
@@ -395,7 +334,7 @@ func (s *Server) property(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet:
-		_, authenticated := s.authenticate(r)
+		_, authenticated := s.requireActive(w, r)
 		property, err := s.store.GetProperty(r.Context(), id, authenticated)
 		if err != nil {
 			s.databaseError(w, r, err)
@@ -403,12 +342,19 @@ func (s *Server) property(w http.ResponseWriter, r *http.Request) {
 		}
 		writeData(w, r, http.StatusOK, property)
 	case http.MethodPatch:
-		if _, ok := s.require(w, r, "Agente", "Administrador"); !ok {
+		current, ok := s.require(w, r, "Agente", "Administrador")
+		if !ok {
+			return
+		}
+		if !s.mayManageProperty(w, r, current, id) {
 			return
 		}
 		var fields map[string]interface{}
 		if !decodeJSON(w, r, &fields) {
 			return
+		}
+		if current.Role == "Agente" {
+			delete(fields, "agenteId")
 		}
 		property, err := s.store.UpdateProperty(r.Context(), id, fields)
 		if err != nil {
@@ -417,7 +363,11 @@ func (s *Server) property(w http.ResponseWriter, r *http.Request) {
 		}
 		writeData(w, r, http.StatusOK, property)
 	case http.MethodDelete:
-		if _, ok := s.require(w, r, "Agente", "Administrador"); !ok {
+		current, ok := s.require(w, r, "Agente", "Administrador")
+		if !ok {
+			return
+		}
+		if !s.mayManageProperty(w, r, current, id) {
 			return
 		}
 		if err := s.store.DeleteProperty(r.Context(), id); err != nil {
@@ -430,9 +380,6 @@ func (s *Server) property(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) images(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("inmuebleId")
-	if _, ok := s.requireIfWrite(w, r, "Agente", "Administrador"); !ok && r.Method != http.MethodGet {
-		return
-	}
 	if r.Method == http.MethodGet {
 		images, err := s.store.ListImages(r.Context(), id)
 		if err != nil {
@@ -442,16 +389,41 @@ func (s *Server) images(w http.ResponseWriter, r *http.Request) {
 		writeData(w, r, http.StatusOK, images)
 		return
 	}
-	var input struct {
-		URL   string `json:"urlArchivo"`
-		Order int    `json:"ordenVisualizacion"`
-		Cover bool   `json:"esPortada"`
-	}
-	if !decodeJSON(w, r, &input) || input.URL == "" {
-		writeError(w, r, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "urlArchivo es obligatorio.", nil)
+	current, ok := s.require(w, r, "Agente", "Administrador")
+	if !ok || !s.mayManageProperty(w, r, current, id) {
 		return
 	}
-	image, err := s.store.AddImage(r.Context(), id, store.Image{FileURL: input.URL, DisplayOrder: input.Order, IsCover: input.Cover})
+	var input struct {
+		URL        string `json:"urlArchivo"`
+		StorageKey string `json:"storageKey"`
+		Order      int    `json:"ordenVisualizacion"`
+		Cover      bool   `json:"esPortada"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	if input.URL == "" && input.StorageKey == "" {
+		writeError(w, r, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "urlArchivo o storageKey es obligatorio.", nil)
+		return
+	}
+	if input.URL != "" && !strings.HasPrefix(input.URL, "https://") {
+		writeError(w, r, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "urlArchivo debe ser una URL https.", nil)
+		return
+	}
+	var key *string
+	if input.StorageKey != "" {
+		if !s.r2.Enabled() {
+			writeError(w, r, http.StatusServiceUnavailable, "R2_UNAVAILABLE", "La configuración de imágenes no está disponible.", nil)
+			return
+		}
+		if !strings.HasPrefix(input.StorageKey, "inmuebles/"+id+"/") {
+			writeError(w, r, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "storageKey no corresponde al inmueble.", nil)
+			return
+		}
+		input.URL = s.r2.PublicURL(input.StorageKey)
+		key = &input.StorageKey
+	}
+	image, err := s.store.AddImage(r.Context(), id, store.Image{FileURL: input.URL, StorageKey: key, DisplayOrder: input.Order, IsCover: input.Cover})
 	if err != nil {
 		s.databaseError(w, r, err)
 		return
@@ -665,11 +637,21 @@ func (s *Server) inquiries(w http.ResponseWriter, r *http.Request) {
 		writeData(w, r, http.StatusCreated, inquiry)
 		return
 	}
-	if _, ok := s.require(w, r, "Agente", "Administrador"); !ok {
+	current, ok := s.require(w, r, "Agente", "Administrador")
+	if !ok {
 		return
 	}
 	page, pageSize := pageParams(r)
-	inquiries, total, err := s.store.ListInquiries(r.Context(), page, pageSize)
+	filter := store.InquiryFilter{
+		Status: r.URL.Query().Get("estado"), Channel: r.URL.Query().Get("canal"),
+		AgentID: r.URL.Query().Get("agenteId"), Query: r.URL.Query().Get("q"),
+		Page: page, PageSize: pageSize,
+	}
+	restrict := ""
+	if current.Role == "Agente" {
+		restrict = current.Subject
+	}
+	inquiries, total, err := s.store.ListInquiryDetails(r.Context(), filter, restrict)
 	if err != nil {
 		s.databaseError(w, r, err)
 		return
@@ -786,17 +768,48 @@ func (s *Server) createPublicInquiry(w http.ResponseWriter, r *http.Request, inp
 }
 
 func (s *Server) updateInquiry(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.require(w, r, "Agente", "Administrador"); !ok {
+	current, ok := s.require(w, r, "Agente", "Administrador")
+	if !ok {
+		return
+	}
+	id := r.PathValue("consultaId")
+	existing, err := s.store.GetInquiryDetail(r.Context(), id)
+	if err != nil {
+		s.databaseError(w, r, err)
+		return
+	}
+	if current.Role == "Agente" && (existing.AssignedAgent == nil || *existing.AssignedAgent != current.Subject) {
+		writeError(w, r, http.StatusForbidden, "FORBIDDEN", "La consulta no está asignada a su cartera.", nil)
 		return
 	}
 	var input struct {
-		Status *string `json:"estadoSeguimiento"`
-		Notes  *string `json:"notasInternas"`
+		Status  *string `json:"estadoSeguimiento"`
+		Notes   *string `json:"notasInternas"`
+		AgentID *string `json:"agenteAsignadoId"`
 	}
 	if !decodeJSON(w, r, &input) {
 		return
 	}
-	inquiry, err := s.store.UpdateInquiry(r.Context(), r.PathValue("consultaId"), input.Status, input.Notes)
+	if err := validateInquiryStatus(input.Status); err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, "VALIDATION_ERROR", err.Error(), nil)
+		return
+	}
+	var agentID *string
+	if input.AgentID != nil {
+		if current.Role != "Administrador" {
+			writeError(w, r, http.StatusForbidden, "FORBIDDEN", "Solo un administrador puede reasignar consultas.", nil)
+			return
+		}
+		if *input.AgentID != "" {
+			agent, err := s.store.GetUser(r.Context(), *input.AgentID)
+			if err != nil || agent.Operational != "Activo" || (agent.Role != "Agente" && agent.Role != "Administrador") {
+				writeError(w, r, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "agenteAsignadoId no es válido.", nil)
+				return
+			}
+		}
+		agentID = input.AgentID
+	}
+	inquiry, err := s.store.AssignInquiry(r.Context(), id, agentID, input.Status, normalizeText(input.Notes))
 	if err != nil {
 		s.databaseError(w, r, err)
 		return

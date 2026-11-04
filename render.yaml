@@ -17,3 +17,17 @@ services:
         value: "true"
       - key: ALLOWED_ORIGINS
         value: "https://inmobiliariafront.joaquinr-val.workers.dev,http://localhost:5173,http://127.0.0.1:5173"
+      - key: MEDIA_BASE_URL
+        value: "https://inmobiliariafront.joaquinr-val.workers.dev/media"
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        value: "adelson-inmuebles"
+      - key: R2_PRESIGN_TTL
+        value: "300"
+      - key: R2_MAX_UPLOAD_BYTES
+        value: "8388608"

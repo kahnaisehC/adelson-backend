@@ -105,6 +105,7 @@ CREATE TABLE imagenes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     inmueble_id UUID NOT NULL REFERENCES inmuebles(id) ON DELETE CASCADE,
     url_archivo TEXT NOT NULL,
+    storage_key TEXT,
     orden_visualizacion INT DEFAULT 1,
     es_portada BOOLEAN DEFAULT false,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -131,6 +132,7 @@ CREATE TABLE consultas (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     cliente_id UUID NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
     inmueble_id UUID REFERENCES inmuebles(id) ON DELETE CASCADE,
+    agente_asignado_id UUID REFERENCES usuarios(id) ON DELETE SET NULL,
     fecha_hora TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     canal_origen canal_origen_enum NOT NULL,
     estado_seguimiento estado_seguimiento_enum DEFAULT 'Pendiente',
@@ -154,3 +156,20 @@ CREATE TABLE sesiones_chat (
     -- El array de mensajes se guarda aquí de forma estructurada
     historial_mensajes JSONB DEFAULT '[]'::jsonb
 );
+
+
+-- Sesiones de refresh para el panel administrativo.
+CREATE TABLE sesiones_refresco (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    usuario_id UUID NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    jti UUID NOT NULL UNIQUE,
+    user_agent TEXT,
+    ip VARCHAR(64),
+    expires_at TIMESTAMP NOT NULL,
+    revoked_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_sesiones_refresco_usuario ON sesiones_refresco(usuario_id);
+CREATE INDEX idx_consultas_agente ON consultas(agente_asignado_id);
+CREATE INDEX idx_consultas_estado ON consultas(estado_seguimiento);
+CREATE INDEX idx_consultas_fecha ON consultas(fecha_hora DESC);

@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -19,6 +20,13 @@ type Config struct {
 	ServiceToken   string
 	CookieSecure   bool
 	AllowedOrigins []string
+	MediaBaseURL   string
+	R2AccountID    string
+	R2AccessKeyID  string
+	R2SecretKey    string
+	R2Bucket       string
+	R2PresignTTL   time.Duration
+	R2MaxUpload    int64
 }
 
 func Load() (Config, error) {
@@ -37,6 +45,13 @@ func Load() (Config, error) {
 		JWTSecret:      os.Getenv("JWT_SECRET"),
 		ServiceToken:   os.Getenv("SERVICE_TOKEN"),
 		AllowedOrigins: allowedOrigins,
+		MediaBaseURL:   strings.TrimRight(valueOrDefault("MEDIA_BASE_URL", productionWorkerOrigin+"/media"), "/"),
+		R2AccountID:    os.Getenv("R2_ACCOUNT_ID"),
+		R2AccessKeyID:  os.Getenv("R2_ACCESS_KEY_ID"),
+		R2SecretKey:    os.Getenv("R2_SECRET_ACCESS_KEY"),
+		R2Bucket:       os.Getenv("R2_BUCKET"),
+		R2PresignTTL:   time.Duration(envInt64("R2_PRESIGN_TTL", 300)) * time.Second,
+		R2MaxUpload:    envInt64("R2_MAX_UPLOAD_BYTES", 8<<20),
 	}
 
 	cfg.CookieSecure = true
@@ -80,6 +95,18 @@ func containsOrigin(origins []string, target string) bool {
 		}
 	}
 	return false
+}
+
+func envInt64(key string, fallback int64) int64 {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+	return parsed
 }
 
 func resolveAddr() string {
