@@ -55,7 +55,7 @@ El script genera una contraseña aleatoria para el agente demo y es idempotente.
 Crear o actualizar el administrador inicial y reasignar la cartera demo:
 
 ```bash
-ADMIN_EMAIL=adelsoninmobiliaria@hotmail.com \
+ADMIN_EMAIL='<correo-del-administrador>' \
 ADMIN_PASSWORD='una-contraseña-segura' \
 go run ./cmd/create-admin -nombre Marcelo -apellido Benato
 ```
