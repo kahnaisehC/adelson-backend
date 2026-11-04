@@ -1,8 +1,28 @@
--- Datos de ejemplo para el sitio público.
--- Requiere que database/setup.sql ya esté aplicado.
--- Para producción usar database/neon_production_sync.sql.
--- La contraseña del agente demo se genera aleatoriamente.
+-- ============================================================
+-- Seed de desarrollo — Adelson
+-- Combina el catálogo del sitio público (agente demo + 8 inmuebles)
+-- con usuarios/CRM de prueba que tienen credenciales conocidas.
+--
+-- Requiere database/setup.sql y las migraciones aplicadas.
+-- Es idempotente: puede ejecutarse varias veces (ON CONFLICT DO NOTHING).
+--
+-- Credenciales:
+--   Administrador  admin@adelson.example   / Admin12345
+--   Agente         carlos@adelson.example  / Agente12345
+--   Agente demo    agente@adelson.example  / (aleatoria, no usable)
+--   Clientes       (sin login propio)      / Cliente12345
+--
+-- Reset limpio opcional: descomentar el bloque TRUNCATE de abajo.
+-- ============================================================
+BEGIN;
 
+-- Reset opcional (DESTRUCTIVO: borra todos los datos):
+-- TRUNCATE sesiones_chat, consultas, preferencias_busquedas, imagenes,
+--          inmuebles, clientes, usuarios, telefonos_persona, personas CASCADE;
+
+-- ============================================================
+-- 1) AGENTE DEMO + CATÁLOGO PÚBLICO (8 inmuebles)
+-- ============================================================
 INSERT INTO personas (id, nombre, apellido, dni, correo_electronico, contrasena_hash)
 VALUES (
     '00000000-0000-4000-8000-000000000001',
@@ -118,3 +138,133 @@ VALUES
 ('22222222-2222-4222-8222-222222222107', '11111111-1111-4111-8111-111111111107', 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&w=1600&q=70', 1, true),
 ('22222222-2222-4222-8222-222222222108', '11111111-1111-4111-8111-111111111108', 'https://images.unsplash.com/photo-1493809842364-78817add7ffb?auto=format&fit=crop&w=1600&q=70', 1, true)
 ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================
+-- 2) USUARIOS INTERNOS DE PRUEBA (login conocido)
+-- ============================================================
+-- Administrador: admin@adelson.example / Admin12345
+INSERT INTO personas (id, nombre, apellido, dni, correo_electronico, contrasena_hash) VALUES
+('10000000-0000-0000-0000-000000000001', 'Ana',  'Pérez', '20111222',
+ 'admin@adelson.example',
+ '$2a$10$0twY3UDEYJjLLkGptWbYYOC6y95bf/ddp.UWB3OvoIqZSETpvYFhG')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO usuarios (id, rol, estado_operativo) VALUES
+('10000000-0000-0000-0000-000000000001', 'Administrador', 'Activo')
+ON CONFLICT (id) DO NOTHING;
+
+-- Agente: carlos@adelson.example / Agente12345
+INSERT INTO personas (id, nombre, apellido, dni, correo_electronico, contrasena_hash) VALUES
+('10000000-0000-0000-0000-000000000002', 'Carlos', 'López', '25123456',
+ 'carlos@adelson.example',
+ '$2a$10$lpxen9smIx8/uBH.HLemKO/wn4khGdW0G5MbJ7/9j.5dLS96Jpgg2')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO usuarios (id, rol, estado_operativo) VALUES
+('10000000-0000-0000-0000-000000000002', 'Agente', 'Activo')
+ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================
+-- 3) CLIENTES + TELÉFONOS
+-- ============================================================
+INSERT INTO personas (id, nombre, apellido, dni, correo_electronico, contrasena_hash) VALUES
+('20000000-0000-0000-0000-000000000001', 'María',  'Gómez',     '32999888', 'maria@example.com',  '$2a$10$.tiPDO2gusHsHMOGbkhrbOlnenFNH736k8rYhYsTJq2IAAku4WJGe'),
+('20000000-0000-0000-0000-000000000002', 'Juan',   'Fernández', '30111222', 'juan@example.com',   '$2a$10$.tiPDO2gusHsHMOGbkhrbOlnenFNH736k8rYhYsTJq2IAAku4WJGe'),
+('20000000-0000-0000-0000-000000000003', 'Lucía',  'Rodríguez', '27888999', 'lucia@example.com',  '$2a$10$.tiPDO2gusHsHMOGbkhrbOlnenFNH736k8rYhYsTJq2IAAku4WJGe')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO clientes (id, consentimiento_notificaciones, estado_lead, tipo_cliente_principal) VALUES
+('20000000-0000-0000-0000-000000000001', true,  'Contactado',      'Buscando Alquiler'),
+('20000000-0000-0000-0000-000000000002', true,  'Nuevo',           'Buscando Comprar'),
+('20000000-0000-0000-0000-000000000003', false, 'En Negociación',  'Propietario')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO telefonos_persona (id, persona_id, numero, es_principal) VALUES
+('50000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', '+5493492123456', true),
+('50000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000002', '+5493492654321', true),
+('50000000-0000-0000-0000-000000000003', '20000000-0000-0000-0000-000000000003', '+5493492789456', true)
+ON CONFLICT DO NOTHING;
+
+-- ============================================================
+-- 4) INMUEBLES DE PRUEBA (agente_id = Carlos)
+-- ============================================================
+INSERT INTO inmuebles (id, agente_id, titulo, descripcion, tipo_operacion, tipo_inmueble, estado,
+                       precio, moneda, monto_expensas, cant_ambientes, cant_habitaciones, cant_banos,
+                       cant_cocheras, superficie_total, superficie_cubierta, calle, numero, barrio,
+                       ciudad, latitud, longitud, caracteristicas) VALUES
+('30000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000002',
+ 'Departamento luminoso en el Centro', 'Dos habitaciones, balcón y cochera.', 'Alquiler', 'Departamento',
+ 'Disponible', 800.00, 'Dólares', 95000.00, 3, 2, 1, 1, 70.00, 65.00, 'San Martín', '123', 'Centro',
+ 'Rafaela', -31.25000000, -61.48670000, '{"balcon":true,"aptoMascotas":true,"calefaccion":"Gas"}'),
+
+('30000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000002',
+ 'Casa familiar con patio', 'Casa de 4 ambientes con quincho.', 'Venta', 'Casa', 'Disponible',
+ 185000.00, 'Dólares', 0, 4, 3, 2, 2, 180.00, 160.00, '9 de Julio', '455', 'Barrio Norte',
+ 'Rafaela', -31.24000000, -61.49000000, '{"patio":true,"parrilla":true,"cochera":2}'),
+
+('30000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000002',
+ 'Departamento 2 ambientes', 'Ideal para pareja, cerca de plaza.', 'Alquiler', 'Departamento',
+ 'Disponible', 350000.00, 'Pesos', 48000.00, 2, 1, 1, 0, 45.00, 42.00, 'Belgrano', '200', 'Centro',
+ 'Rafaela', -31.25200000, -61.48800000, '{"balcon":false,"aptoMascotas":false}'),
+
+('30000000-0000-0000-0000-000000000004', '10000000-0000-0000-0000-000000000002',
+ 'Terreno en zona de crecimiento', 'Lote apto para vivienda o comercio.', 'Venta', 'Terreno',
+ 'Disponible', 25000000.00, 'Pesos', 0, NULL, NULL, NULL, NULL, 400.00, NULL, NULL, NULL, 'Zona Sur',
+ 'Rafaela', -31.26000000, -61.47500000, '{"servicios":"agua, luz"}'),
+
+('30000000-0000-0000-0000-000000000005', '10000000-0000-0000-0000-000000000002',
+ 'Local comercial céntrico', 'Frente vidriado sobre peatonal.', 'Alquiler', 'Local Comercial',
+ 'Reservado', 900000.00, 'Pesos', 120000.00, 1, NULL, 1, 0, 85.00, 80.00, '25 de Mayo', '98', 'Centro',
+ 'Rafaela', -31.24900000, -61.48700000, '{"vidriera":true,"deposito":true}')
+ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================
+-- 5) IMÁGENES DE LOS INMUEBLES DE PRUEBA
+-- ============================================================
+INSERT INTO imagenes (id, inmueble_id, url_archivo, orden_visualizacion, es_portada) VALUES
+('40000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001',
+ 'https://cdn.adelson.example/inmuebles/dpto-centro/frente.webp', 1, true),
+('40000000-0000-0000-0000-000000000002', '30000000-0000-0000-0000-000000000001',
+ 'https://cdn.adelson.example/inmuebles/dpto-centro/balcon.webp', 2, false),
+('40000000-0000-0000-0000-000000000003', '30000000-0000-0000-0000-000000000002',
+ 'https://cdn.adelson.example/inmuebles/casa-patio/frente.webp', 1, true)
+ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================
+-- 6) PREFERENCIAS DE BÚSQUEDA
+-- ============================================================
+INSERT INTO preferencias_busquedas (id, cliente_id, rango_precio_min, rango_precio_max, moneda,
+                                    tipo_operacion, tipo_inmueble, cantidad_dormitorios_min, zona_preferida) VALUES
+('60000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001',
+ 500.00, 800.00, 'Dólares', 'Alquiler', 'Departamento', 2, 'Centro'),
+('60000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000002',
+ 150000.00, 200000.00, 'Dólares', 'Venta', 'Casa', 3, NULL)
+ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================
+-- 7) CONSULTAS
+-- ============================================================
+INSERT INTO consultas (id, cliente_id, inmueble_id, canal_origen, estado_seguimiento, notas_internas) VALUES
+('70000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001',
+ '30000000-0000-0000-0000-000000000001', 'Portal Web', 'Visita Agendada', 'Visita confirmada para el viernes a las 17:00.'),
+('70000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000002',
+ '30000000-0000-0000-0000-000000000002', 'WhatsApp', 'Pendiente', NULL),
+('70000000-0000-0000-0000-000000000003', '20000000-0000-0000-0000-000000000003',
+ '30000000-0000-0000-0000-000000000005', 'Manual', 'Contactado', NULL)
+ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================
+-- 8) SESIONES DE CHAT
+-- ============================================================
+INSERT INTO sesiones_chat (id, cliente_id, agente_asignado_id, estado_sesion, historial_mensajes) VALUES
+('80000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001',
+ NULL, 'Atendida por IA',
+ '[
+   {"id":"b1","remitenteTipo":"cliente","contenido":"Hola, busco un depto de 2 ambientes","fechaHora":"2026-10-10T14:00:00Z"},
+   {"id":"b2","remitenteTipo":"ia","contenido":"Encontré propiedades que coinciden","fechaHora":"2026-10-10T14:00:05Z","metadata":{"modelo":"adelai","tool":"buscar_propiedades"}}
+ ]'::jsonb),
+('80000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000002',
+ '10000000-0000-0000-0000-000000000002', 'Esperando Humano', '[]'::jsonb)
+ON CONFLICT (id) DO NOTHING;
+
+COMMIT;
