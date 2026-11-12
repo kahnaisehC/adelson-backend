@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"adelson-backend/internal/config"
+	"adelson-backend/internal/geocoding"
 	"adelson-backend/internal/storage"
 	"adelson-backend/internal/store"
 	"github.com/golang-jwt/jwt/v5"
@@ -28,6 +29,7 @@ type Server struct {
 	r2             *storage.R2
 	limiter        *attemptLimiter
 	accountLimiter *attemptLimiter
+	geocoder       addressGeocoder
 }
 
 type contextKey string
@@ -58,6 +60,7 @@ func New(cfg config.Config, db *store.Store, logger *slog.Logger) http.Handler {
 		r2:             r2,
 		limiter:        newAttemptLimiter(5, 15*time.Minute),
 		accountLimiter: newAttemptLimiter(10, 15*time.Minute),
+		geocoder:       geocoding.New(cfg.GeocoderContact, cfg.GeocoderTimeout),
 	}
 	mux := http.NewServeMux()
 
@@ -111,6 +114,7 @@ func New(cfg config.Config, db *store.Store, logger *slog.Logger) http.Handler {
 	mux.HandleFunc("PATCH /api/v1/consultas/{consultaId}", s.updateInquiry)
 	mux.HandleFunc("GET /api/v1/dashboard", s.dashboard)
 	mux.HandleFunc("POST /api/v1/uploads/presign", s.presignUpload)
+	mux.HandleFunc("POST /api/v1/ubicacion/geocodificar", s.geocode)
 
 	mux.HandleFunc("GET /api/v1/sesiones-chat", s.sessions)
 	mux.HandleFunc("POST /api/v1/sesiones-chat", s.sessions)
