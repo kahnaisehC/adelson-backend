@@ -85,7 +85,9 @@ Implementado con PostgreSQL:
 - Clientes, teléfonos, consentimiento y preferencias.
 - Consultas internas, consultas públicas desde un inmueble y consulta general desde `/contacto`.
 - Sesiones de chat, mensajes y transiciones de handoff.
-- Verificación básica de webhook de WhatsApp.
+- Webhook de WhatsApp validado con firma HMAC-SHA256 (`X-Hub-Signature-256`).
+
+Para configurar el webhook de WhatsApp en Meta, usar `https://<tu-dominio>/api/v1/webhooks/whatsapp` como URL, `SERVICE_TOKEN` como token de verificación, y configurar `WHATSAPP_APP_SECRET` con el App Secret de la aplicación de Meta.
 
 El panel administrativo agrega:
 
@@ -129,7 +131,8 @@ Variables de entorno requeridas:
 |---|---|
 | `DATABASE_URL` | Cadena de conexión a PostgreSQL (immutable). |
 | `JWT_SECRET` | Secreto del JWT; `render.yaml` lo genera automáticamente. |
-| `SERVICE_TOKEN` | Token de servicio para workers/webhooks; `render.yaml` lo genera automáticamente. |
+| `SERVICE_TOKEN` | Token de servicio para workers/webhooks; `render.yaml` lo genera automáticamente. Usado también como `hub.verify_token` del webhook de WhatsApp. |
+| `WHATSAPP_APP_SECRET` | App Secret de Meta para validar la firma del webhook de WhatsApp (`X-Hub-Signature-256`). |
 | `COOKIE_SECURE` | `true` en producción (HTTPS). |
 | `ALLOWED_ORIGINS` | Orígenes permitidos por CORS, separados por coma. Incluir el dominio de Cloudflare Workers. |
 | `MEDIA_BASE_URL` | Base pública de imágenes servida por el Worker, por ejemplo `https://inmobiliariafront.joaquinr-val.workers.dev/media`. |

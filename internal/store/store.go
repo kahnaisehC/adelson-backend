@@ -662,6 +662,71 @@ func (s *Store) GetClientByEmail(ctx context.Context, email string) (Client, err
 	return client, err
 }
 
+func (s *Store) GetClientByPhone(ctx context.Context, phone string) (Client, error) {
+	if s.DB == nil {
+		return Client{}, errors.New("database is not configured")
+	}
+	query := `SELECT p.id, p.nombre, p.apellido, p.dni, p.correo_electronico, c.consentimiento_notificaciones, c.estado_lead, c.tipo_cliente_principal, c.fecha_registro, c.fecha_ultima_interaccion
+		FROM telefonos_persona tp
+		JOIN clientes c ON c.id = tp.persona_id
+		JOIN personas p ON p.id = c.id
+		WHERE regexp_replace(tp.numero, '\D', '', 'g') = $1
+		  AND p.deleted_at IS NULL
+		ORDER BY tp.es_principal DESC
+		LIMIT 1`
+	row := s.DB.QueryRowContext(ctx, query, phone)
+	client, err := scanClient(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Client{}, ErrNotFound
+	}
+	if err != nil {
+		return Client{}, fmt.Errorf("get client by phone: %w", err)
+	}
+	return client, nil
+}
+
+func (s *Store) GetOpenChatSession(ctx context.Context, clientID string) (*ChatSession, error) {
+	if s.DB == nil {
+		return nil, errors.New("database is not configured")
+	}
+	query := `SELECT id, cliente_id, agente_asignado_id, fecha_inicio, fecha_ultima_interaccion, estado_sesion, historial_mensajes
+		FROM sesiones_chat
+		WHERE cliente_id = $1 AND estado_sesion <> 'Cerrada'
+		ORDER BY fecha_ultima_interaccion DESC
+		LIMIT 1`
+	var session ChatSession
+	err := s.DB.QueryRowContext(ctx, query, clientID).Scan(&session.ID, &session.ClientID, &session.AssignedAgentID, &session.StartedAt, &session.LastInteraction, &session.Status, &session.MessageHistory)
+	if errors.Is(err, sql.ErrNoRows) {
+		return (*ChatSession)(nil), nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get open chat session: %w", err)
+	}
+	return &session, nil
+}
+
+func (s *Store) MessageExists(ctx context.Context, sessionID, providerMessageID string) (bool, error) {
+	if s.DB == nil {
+		return false, errors.New("database is not configured")
+	}
+	var exists bool
+	err := s.DB.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM sesiones_chat WHERE id = $1 AND historial_mensajes @> jsonb_build_array(jsonb_build_object('providerMessageId', $2)))`, sessionID, providerMessageID).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("check message exists: %w", err)
+	}
+	return exists, nil
+}
+
+func (s *Store) TouchClient(ctx context.Context, clientID string) error {
+	if s.DB == nil {
+		return errors.New("database is not configured")
+	}
+	if _, err := s.DB.ExecContext(ctx, `UPDATE clientes SET fecha_ultima_interaccion = CURRENT_TIMESTAMP WHERE id = $1`, clientID); err != nil {
+		return fmt.Errorf("touch client: %w", err)
+	}
+	return nil
+}
+
 type Phone struct {
 	ID       string `json:"id"`
 	ClientID string `json:"personaId"`

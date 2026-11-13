@@ -49,7 +49,7 @@ Go 1.26 is required (`go.mod`); toolchain in use is 1.26.5.
 - JWT HS256. Access token (15 min) via `Authorization: Bearer`; refresh token (7 days) in httpOnly cookie `refresh_token` scoped to `/api/v1/auth`. Refresh sessions are stored in `sesiones_refresco` for rotation/revocation.
 - Role gate: `s.require(w, r, "Administrador", ...)`. Roles are `Administrador`, `Agente`, `Servicio`.
 - Service/worker callers use header `X-Service-Token` (== `SERVICE_TOKEN`) mapping to role `Servicio`.
-- WhatsApp webhook: `GET` verifies `hub.verify_token`; `POST` requires `X-Webhook-Token`, both == `SERVICE_TOKEN`.
+- WhatsApp webhook: `GET` verifies `hub.verify_token` against `SERVICE_TOKEN`; `POST` validates the `X-Hub-Signature-256` header using `WHATSAPP_APP_SECRET` (HMAC-SHA256 of the raw body).
 
 ## DB model conventions
 

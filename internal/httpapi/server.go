@@ -931,14 +931,6 @@ func (s *Server) whatsappVerify(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(r.URL.Query().Get("hub.challenge")))
 }
 
-func (s *Server) whatsappWebhook(w http.ResponseWriter, r *http.Request) {
-	if s.config.ServiceToken == "" || r.Header.Get("X-Webhook-Token") != s.config.ServiceToken {
-		writeError(w, r, http.StatusUnauthorized, "UNAUTHENTICATED", "Webhook no autorizado.", nil)
-		return
-	}
-	w.WriteHeader(http.StatusAccepted)
-}
-
 func (s *Server) notImplemented(w http.ResponseWriter, r *http.Request) {
 	writeError(w, r, http.StatusNotImplemented, "NOT_IMPLEMENTED", "Este endpoint requiere tablas o componentes que todavía no están implementados.", nil)
 }

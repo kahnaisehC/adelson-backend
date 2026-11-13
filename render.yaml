@@ -13,6 +13,8 @@ services:
         generateValue: true
       - key: SERVICE_TOKEN
         generateValue: true
+      - key: WHATSAPP_APP_SECRET
+        sync: false
       - key: COOKIE_SECURE
         value: "true"
       - key: ALLOWED_ORIGINS
