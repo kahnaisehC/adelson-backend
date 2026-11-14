@@ -132,6 +132,10 @@ func (s *Server) handleChatWebhook(provider ChatProvider, w http.ResponseWriter,
 		if err := s.store.TouchClient(ctx, client.ID); err != nil {
 			s.log.Debug("could not touch client", "error", err.Error(), "client_id", client.ID)
 		}
+
+		if err := provider.Reply(msg.ExternalID, msg.Text); err != nil {
+			s.log.Error("failed to reply to inbound message", "error", err.Error(), "channel", provider.Name(), "external_id", msg.ExternalID)
+		}
 	}
 
 	writeData(w, r, http.StatusOK, map[string]string{"status": "received"})
