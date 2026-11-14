@@ -127,6 +127,7 @@ func New(cfg config.Config, db *store.Store, logger *slog.Logger) http.Handler {
 
 	mux.HandleFunc("GET /api/v1/webhooks/whatsapp", s.whatsappVerify)
 	mux.HandleFunc("POST /api/v1/webhooks/whatsapp", s.whatsappWebhook)
+	mux.HandleFunc("POST /api/v1/webhooks/telegram", s.telegramWebhook)
 	mux.HandleFunc("POST /api/v1/interno/jobs/matching", s.notImplemented)
 	mux.HandleFunc("GET /api/v1/auditoria", s.notImplemented)
 	mux.HandleFunc("GET /api/v1/seguimientos", s.notImplemented)

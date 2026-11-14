@@ -19,6 +19,7 @@ type Config struct {
 	JWTSecret         string
 	ServiceToken      string
 	WhatsAppAppSecret string
+	TelegramToken     string
 	CookieSecure      bool
 	AllowedOrigins    []string
 	MediaBaseURL      string
@@ -48,6 +49,7 @@ func Load() (Config, error) {
 		JWTSecret:         os.Getenv("JWT_SECRET"),
 		ServiceToken:      os.Getenv("SERVICE_TOKEN"),
 		WhatsAppAppSecret: os.Getenv("WHATSAPP_APP_SECRET"),
+		TelegramToken:     os.Getenv("TELEGRAM_TOKEN"),
 		AllowedOrigins:    allowedOrigins,
 		MediaBaseURL:      strings.TrimRight(valueOrDefault("MEDIA_BASE_URL", productionWorkerOrigin+"/media"), "/"),
 		R2AccountID:       os.Getenv("R2_ACCOUNT_ID"),
