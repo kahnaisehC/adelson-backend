@@ -710,7 +710,7 @@ func (s *Store) MessageExists(ctx context.Context, sessionID, providerMessageID 
 		return false, errors.New("database is not configured")
 	}
 	var exists bool
-	err := s.DB.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM sesiones_chat WHERE id = $1 AND historial_mensajes @> jsonb_build_array(jsonb_build_object('providerMessageId', $2)))`, sessionID, providerMessageID).Scan(&exists)
+	err := s.DB.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM sesiones_chat WHERE id = $1 AND historial_mensajes @> jsonb_build_array(jsonb_build_object('providerMessageId', $2::text)))`, sessionID, providerMessageID).Scan(&exists)
 	if err != nil {
 		return false, fmt.Errorf("check message exists: %w", err)
 	}
