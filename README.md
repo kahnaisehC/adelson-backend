@@ -90,12 +90,12 @@ Implementado con PostgreSQL:
 
 Para configurar el webhook de WhatsApp en Meta, usar `https://<tu-dominio>/api/v1/webhooks/whatsapp` como URL, `SERVICE_TOKEN` como token de verificación, y configurar `WHATSAPP_APP_SECRET` con el App Secret de la aplicación de Meta.
 
-Para configurar el webhook de Telegram, usar la URL de callback `https://<tu-dominio>/api/v1/webhooks/telegram` y registrarla con el token secreto configurado en `TELEGRAM_TOKEN`:
+Para configurar el webhook de Telegram, usar la URL de callback `https://<tu-dominio>/api/v1/webhooks/telegram` y registrarla con el secreto configurado en `TELEGRAM_WEBHOOK_SECRET` (una cadena simple con solo `A-Z a-z 0-9 _ -`; el `secret_token` de Telegram no admite `:` ni otros caracteres):
 
 ```bash
 curl -X POST "https://api.telegram.org/bot<TOKEN>/setWebhook" \
   -H "Content-Type: application/json" \
-  -d '{"url":"https://<tu-dominio>/api/v1/webhooks/telegram","secret_token":"<TELEGRAM_TOKEN>"}'
+  -d '{"url":"https://<tu-dominio>/api/v1/webhooks/telegram","secret_token":"<TELEGRAM_WEBHOOK_SECRET>"}'
 ```
 
 El panel administrativo agrega:
@@ -142,7 +142,8 @@ Variables de entorno requeridas:
 | `JWT_SECRET` | Secreto del JWT; `render.yaml` lo genera automáticamente. |
 | `SERVICE_TOKEN` | Token de servicio para workers/webhooks; `render.yaml` lo genera automáticamente. Usado también como `hub.verify_token` del webhook de WhatsApp. |
 | `WHATSAPP_APP_SECRET` | App Secret de Meta para validar la firma del webhook de WhatsApp (`X-Hub-Signature-256`). |
-| `TELEGRAM_TOKEN` | Token del bot de Telegram; también se usa como `secret_token` para validar el webhook (`X-Telegram-Bot-Api-Secret-Token`). |
+| `TELEGRAM_TOKEN` | Token del bot de Telegram, usado para enviar mensajes (`sendMessage`). |
+| `TELEGRAM_WEBHOOK_SECRET` | Secreto para validar el webhook de Telegram (`X-Telegram-Bot-Api-Secret-Token`). Debe ser una cadena simple con solo `A-Z a-z 0-9 _ -`. |
 | `COOKIE_SECURE` | `true` en producción (HTTPS). |
 | `ALLOWED_ORIGINS` | Orígenes permitidos por CORS, separados por coma. Incluir el dominio de Cloudflare Workers. |
 | `MEDIA_BASE_URL` | Base pública de imágenes servida por el Worker, por ejemplo `https://inmobiliariafront.joaquinr-val.workers.dev/media`. |

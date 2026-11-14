@@ -17,6 +17,8 @@ services:
         sync: false
       - key: TELEGRAM_TOKEN
         sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false
       - key: COOKIE_SECURE
         value: "true"
       - key: ALLOWED_ORIGINS

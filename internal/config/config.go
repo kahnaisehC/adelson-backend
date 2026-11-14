@@ -14,23 +14,24 @@ import (
 const productionWorkerOrigin = "https://inmobiliariafront.joaquinr-val.workers.dev"
 
 type Config struct {
-	Addr              string
-	DatabaseURL       string
-	JWTSecret         string
-	ServiceToken      string
-	WhatsAppAppSecret string
-	TelegramToken     string
-	CookieSecure      bool
-	AllowedOrigins    []string
-	MediaBaseURL      string
-	R2AccountID       string
-	R2AccessKeyID     string
-	R2SecretKey       string
-	R2Bucket          string
-	R2PresignTTL      time.Duration
-	R2MaxUpload       int64
-	GeocoderContact   string
-	GeocoderTimeout   time.Duration
+	Addr                  string
+	DatabaseURL           string
+	JWTSecret             string
+	ServiceToken          string
+	WhatsAppAppSecret     string
+	TelegramToken         string
+	TelegramWebhookSecret string
+	CookieSecure          bool
+	AllowedOrigins        []string
+	MediaBaseURL          string
+	R2AccountID           string
+	R2AccessKeyID         string
+	R2SecretKey           string
+	R2Bucket              string
+	R2PresignTTL          time.Duration
+	R2MaxUpload           int64
+	GeocoderContact       string
+	GeocoderTimeout       time.Duration
 }
 
 func Load() (Config, error) {
@@ -44,22 +45,23 @@ func Load() (Config, error) {
 	}
 
 	cfg := Config{
-		Addr:              resolveAddr(),
-		DatabaseURL:       os.Getenv("DATABASE_URL"),
-		JWTSecret:         os.Getenv("JWT_SECRET"),
-		ServiceToken:      os.Getenv("SERVICE_TOKEN"),
-		WhatsAppAppSecret: os.Getenv("WHATSAPP_APP_SECRET"),
-		TelegramToken:     os.Getenv("TELEGRAM_TOKEN"),
-		AllowedOrigins:    allowedOrigins,
-		MediaBaseURL:      strings.TrimRight(valueOrDefault("MEDIA_BASE_URL", productionWorkerOrigin+"/media"), "/"),
-		R2AccountID:       os.Getenv("R2_ACCOUNT_ID"),
-		R2AccessKeyID:     os.Getenv("R2_ACCESS_KEY_ID"),
-		R2SecretKey:       os.Getenv("R2_SECRET_ACCESS_KEY"),
-		R2Bucket:          os.Getenv("R2_BUCKET"),
-		R2PresignTTL:      time.Duration(envInt64("R2_PRESIGN_TTL", 300)) * time.Second,
-		R2MaxUpload:       envInt64("R2_MAX_UPLOAD_BYTES", 8<<20),
-		GeocoderContact:   valueOrDefault("GEOCODER_CONTACT", "contacto@adelsoninmobiliaria.com.ar"),
-		GeocoderTimeout:   time.Duration(envInt64("GEOCODER_TIMEOUT_SECONDS", 5)) * time.Second,
+		Addr:                  resolveAddr(),
+		DatabaseURL:           os.Getenv("DATABASE_URL"),
+		JWTSecret:             os.Getenv("JWT_SECRET"),
+		ServiceToken:          os.Getenv("SERVICE_TOKEN"),
+		WhatsAppAppSecret:     os.Getenv("WHATSAPP_APP_SECRET"),
+		TelegramToken:         os.Getenv("TELEGRAM_TOKEN"),
+		TelegramWebhookSecret: os.Getenv("TELEGRAM_WEBHOOK_SECRET"),
+		AllowedOrigins:        allowedOrigins,
+		MediaBaseURL:          strings.TrimRight(valueOrDefault("MEDIA_BASE_URL", productionWorkerOrigin+"/media"), "/"),
+		R2AccountID:           os.Getenv("R2_ACCOUNT_ID"),
+		R2AccessKeyID:         os.Getenv("R2_ACCESS_KEY_ID"),
+		R2SecretKey:           os.Getenv("R2_SECRET_ACCESS_KEY"),
+		R2Bucket:              os.Getenv("R2_BUCKET"),
+		R2PresignTTL:          time.Duration(envInt64("R2_PRESIGN_TTL", 300)) * time.Second,
+		R2MaxUpload:           envInt64("R2_MAX_UPLOAD_BYTES", 8<<20),
+		GeocoderContact:       valueOrDefault("GEOCODER_CONTACT", "contacto@adelsoninmobiliaria.com.ar"),
+		GeocoderTimeout:       time.Duration(envInt64("GEOCODER_TIMEOUT_SECONDS", 5)) * time.Second,
 	}
 
 	cfg.CookieSecure = true

@@ -50,7 +50,7 @@ Go 1.26 is required (`go.mod`); toolchain in use is 1.26.5.
 - Role gate: `s.require(w, r, "Administrador", ...)`. Roles are `Administrador`, `Agente`, `Servicio`.
 - Service/worker callers use header `X-Service-Token` (== `SERVICE_TOKEN`) mapping to role `Servicio`.
 - WhatsApp webhook: `GET` verifies `hub.verify_token` against `SERVICE_TOKEN`; `POST` validates the `X-Hub-Signature-256` header using `WHATSAPP_APP_SECRET` (HMAC-SHA256 of the raw body).
-- Telegram webhook: `POST` validates the `X-Telegram-Bot-Api-Secret-Token` header against `TELEGRAM_TOKEN`.
+- Telegram webhook: `POST` validates the `X-Telegram-Bot-Api-Secret-Token` header against `TELEGRAM_WEBHOOK_SECRET` (a simple `A-Z a-z 0-9 _ -` string; not the bot token). `TELEGRAM_TOKEN` is only used to send messages.
 
 ## DB model conventions
 

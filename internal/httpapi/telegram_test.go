@@ -16,17 +16,18 @@ import (
 
 func telegramTestServer() http.Handler {
 	return New(config.Config{
-		JWTSecret:     "test-secret",
-		ServiceToken:  "service-secret",
-		TelegramToken: "tg-token",
+		JWTSecret:             "test-secret",
+		ServiceToken:          "service-secret",
+		TelegramToken:         "tg-token",
+		TelegramWebhookSecret: "tg-secret",
 	}, &store.Store{}, nil)
 }
 
 func TestTelegramVerify(t *testing.T) {
-	p := &telegramProvider{token: "tg-token"}
+	p := &telegramProvider{webhookSecret: "tg-secret"}
 
 	reqOK := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/telegram", nil)
-	reqOK.Header.Set("X-Telegram-Bot-Api-Secret-Token", "tg-token")
+	reqOK.Header.Set("X-Telegram-Bot-Api-Secret-Token", "tg-secret")
 	if !p.Verify(nil, reqOK) {
 		t.Error("expected Verify to be true for matching secret")
 	}
@@ -42,7 +43,7 @@ func TestTelegramVerify(t *testing.T) {
 		t.Error("expected Verify to be false for missing secret")
 	}
 
-	empty := &telegramProvider{token: ""}
+	empty := &telegramProvider{webhookSecret: ""}
 	if empty.Verify(nil, reqOK) {
 		t.Error("expected Verify to be false when provider token is empty")
 	}
@@ -106,7 +107,7 @@ func TestTelegramWebhookAcceptsEmptyUpdate(t *testing.T) {
 	body := strings.NewReader(`{"update_id":1}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/telegram", body)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Telegram-Bot-Api-Secret-Token", "tg-token")
+	req.Header.Set("X-Telegram-Bot-Api-Secret-Token", "tg-secret")
 	rec := httptest.NewRecorder()
 
 	telegramTestServer().ServeHTTP(rec, req)
@@ -134,10 +135,10 @@ func TestTelegramReply(t *testing.T) {
 	defer ts.Close()
 
 	p := &telegramProvider{
-		token:   "tg-token",
-		baseURL: ts.URL,
-		client:  &http.Client{Timeout: 10 * time.Second},
-		log:     slog.Default(),
+		botToken: "tg-token",
+		baseURL:  ts.URL,
+		client:   &http.Client{Timeout: 10 * time.Second},
+		log:      slog.Default(),
 	}
 	if err := p.Reply("424242", "hola de vuelta"); err != nil {
 		t.Fatalf("unexpected reply error: %v", err)
@@ -159,10 +160,10 @@ func TestTelegramReply(t *testing.T) {
 	}))
 	defer errTS.Close()
 	p2 := &telegramProvider{
-		token:   "tg-token",
-		baseURL: errTS.URL,
-		client:  &http.Client{Timeout: 10 * time.Second},
-		log:     slog.Default(),
+		botToken: "tg-token",
+		baseURL:  errTS.URL,
+		client:   &http.Client{Timeout: 10 * time.Second},
+		log:      slog.Default(),
 	}
 	if err := p2.Reply("1", "text"); err == nil {
 		t.Error("expected error when telegram returns ok=false")
@@ -175,10 +176,10 @@ func TestTelegramReply(t *testing.T) {
 	}))
 	defer errTS2.Close()
 	p3 := &telegramProvider{
-		token:   "tg-token",
-		baseURL: errTS2.URL,
-		client:  &http.Client{Timeout: 10 * time.Second},
-		log:     slog.Default(),
+		botToken: "tg-token",
+		baseURL:  errTS2.URL,
+		client:   &http.Client{Timeout: 10 * time.Second},
+		log:      slog.Default(),
 	}
 	if err := p3.Reply("1", "text"); err == nil {
 		t.Error("expected error when telegram returns HTTP 500")

@@ -14,18 +14,20 @@ import (
 )
 
 type telegramProvider struct {
-	token   string
-	baseURL string
-	client  *http.Client
-	log     *slog.Logger
+	botToken      string
+	webhookSecret string
+	baseURL       string
+	client        *http.Client
+	log           *slog.Logger
 }
 
 func (s *Server) telegramWebhook(w http.ResponseWriter, r *http.Request) {
 	p := &telegramProvider{
-		token:   s.config.TelegramToken,
-		baseURL: "https://api.telegram.org",
-		client:  &http.Client{Timeout: 10 * time.Second},
-		log:     s.log,
+		botToken:      s.config.TelegramToken,
+		webhookSecret: s.config.TelegramWebhookSecret,
+		baseURL:       "https://api.telegram.org",
+		client:        &http.Client{Timeout: 10 * time.Second},
+		log:           s.log,
 	}
 	s.handleChatWebhook(p, w, r)
 }
@@ -35,11 +37,11 @@ func (p *telegramProvider) Name() string {
 }
 
 func (p *telegramProvider) Verify(body []byte, r *http.Request) bool {
-	if p.token == "" {
+	if p.webhookSecret == "" {
 		return false
 	}
 	provided := r.Header.Get("X-Telegram-Bot-Api-Secret-Token")
-	return subtle.ConstantTimeCompare([]byte(provided), []byte(p.token)) == 1
+	return subtle.ConstantTimeCompare([]byte(provided), []byte(p.webhookSecret)) == 1
 }
 
 type telegramUpdate struct {
@@ -115,7 +117,7 @@ type telegramResponse struct {
 }
 
 func (p *telegramProvider) Reply(to, text string) error {
-	if p.token == "" {
+	if p.botToken == "" {
 		return fmt.Errorf("telegram provider is not configured")
 	}
 	body, err := json.Marshal(telegramSendMessage{ChatID: to, Text: text})
@@ -123,7 +125,7 @@ func (p *telegramProvider) Reply(to, text string) error {
 		return fmt.Errorf("marshal telegram reply: %w", err)
 	}
 
-	url := p.baseURL + "/bot" + p.token + "/sendMessage"
+	url := p.baseURL + "/bot" + p.botToken + "/sendMessage"
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("build telegram request: %w", err)
