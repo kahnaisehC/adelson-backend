@@ -27,7 +27,7 @@ de AdelAI, apoyado en la abstracción `ChatProvider` existente.
 
 **Pendiente (fuera de este cambio):**
 
-- Migración SQL para agregar `'Telegram'` a `canal_origen_enum` y actualizar
-  `database/seed.sql`.
+- Migración SQL para agregar `'Telegram'` a `canal_origen_enum`
+  (`database/seed.sql` se mantiene sin cambios por decisión).
 - Retiro definitivo del código de WhatsApp (`internal/httpapi/whatsapp.go`).
 - Actualización de menciones de WhatsApp en el repositorio frontend.

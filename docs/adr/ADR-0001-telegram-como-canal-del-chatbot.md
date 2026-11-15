@@ -100,8 +100,9 @@ Adoptar **Telegram Bot API** como canal de mensajería del chatbot:
 
 - **Sin cambio de esquema** para la ingesta y persistencia de mensajes.
 - **Pendiente**: agregar `'Telegram'` a `canal_origen_enum`
-  (`ALTER TYPE ... ADD VALUE 'Telegram'`) y actualizar `database/seed.sql`, cuya
-  consulta demo usa `'WhatsApp'`.
+  (`ALTER TYPE ... ADD VALUE 'Telegram'`). `database/seed.sql` se mantiene sin
+  cambios: su fila demo con `canal_origen = 'WhatsApp'` se conserva como dato
+  histórico de desarrollo.
 - **Configuración**: nuevas variables `TELEGRAM_TOKEN` y `TELEGRAM_WEBHOOK_SECRET`
   (`.env`, `render.yaml`); `WHATSAPP_APP_SECRET` queda como variable legada.
 - **Documentación**: actualizados los documentos del proyecto, el contrato de API,
