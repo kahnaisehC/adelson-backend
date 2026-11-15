@@ -14,7 +14,7 @@ Este diseño relacional soporta el catálogo de propiedades, el embudo de ventas
 | imagenes               | Catálogo Web           | Indexa las referencias de almacenamiento externo vinculadas a una propiedad.          |
 | preferencias_busquedas | CRM / Ventas           | Cuantifica los criterios ideales de un prospecto para el emparejamiento automático.   |
 | consultas              | CRM / Ventas           | Registra el instante exacto en que un interesado interactúa con una publicación.      |
-| sesiones_chat          | Asistente IA           | Mantiene el contexto de las conversaciones de WhatsApp y gestiona el traspaso manual. |
+| sesiones_chat          | Asistente IA           | Mantiene el contexto de las conversaciones del canal de chat (Telegram) y gestiona el traspaso manual. |
 
 **Decisiones Arquitectónicas Aplicadas**
 
@@ -33,3 +33,5 @@ Este diseño relacional soporta el catálogo de propiedades, el embudo de ventas
 - Consolidación del historial de mensajería en estructuras unificadas de lectura rápida para agilizar el procesamiento del LLM.
 
 - Diseño de estados relacionales optimizados para coordinar el tráfico entre respuestas automatizadas y la intervención humana.
+
+- Modelado del canal de mensajería de forma agnóstica: `sesiones_chat` no registra canal (se conserva en el `metadata` de cada mensaje). El canal de las `consultas` se mantiene en `canal_origen_enum`, que actualmente incluye `WhatsApp, Portal Web, Manual` y requiere una migración para incorporar `Telegram` (ver `docs/adr/ADR-0001-telegram-como-canal-del-chatbot.md`).

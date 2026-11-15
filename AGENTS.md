@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Go REST backend for "Adelson" (real-estate catalog + CRM + AdelAI WhatsApp assistant).
+Go REST backend for "Adelson" (real-estate catalog + CRM + AdelAI Telegram assistant).
 Module is `adelson-backend`; the API main lives at `./cmd/api` (NOT repo root).
 
 ## Commands
@@ -25,6 +25,7 @@ Go 1.26 is required (`go.mod`); toolchain in use is 1.26.5.
 - `internal/store/` — all SQL/data access (pgx via `database/sql`): `store.go` (core), `admin.go` (admin panel).
 - `internal/storage/r2.go` — Cloudflare R2 presigned uploads/deletes.
 - `database/setup.sql` — schema source of truth. `database/migrations/` — incremental changes for existing DBs. `docs/api/api_documentation.md` — API contract.
+- `docs/adr/` — architecture decision records (ADR); `docs/CHANGELOG.md` — log of requirement changes.
 
 ## Config / DB
 
@@ -49,8 +50,8 @@ Go 1.26 is required (`go.mod`); toolchain in use is 1.26.5.
 - JWT HS256. Access token (15 min) via `Authorization: Bearer`; refresh token (7 days) in httpOnly cookie `refresh_token` scoped to `/api/v1/auth`. Refresh sessions are stored in `sesiones_refresco` for rotation/revocation.
 - Role gate: `s.require(w, r, "Administrador", ...)`. Roles are `Administrador`, `Agente`, `Servicio`.
 - Service/worker callers use header `X-Service-Token` (== `SERVICE_TOKEN`) mapping to role `Servicio`.
-- WhatsApp webhook: `GET` verifies `hub.verify_token` against `SERVICE_TOKEN`; `POST` validates the `X-Hub-Signature-256` header using `WHATSAPP_APP_SECRET` (HMAC-SHA256 of the raw body).
-- Telegram webhook: `POST` validates the `X-Telegram-Bot-Api-Secret-Token` header against `TELEGRAM_WEBHOOK_SECRET` (a simple `A-Z a-z 0-9 _ -` string; not the bot token). `TELEGRAM_TOKEN` is only used to send messages.
+- Telegram webhook (official chatbot channel): `POST` validates the `X-Telegram-Bot-Api-Secret-Token` header against `TELEGRAM_WEBHOOK_SECRET` (a simple `A-Z a-z 0-9 _ -` string; not the bot token). `TELEGRAM_TOKEN` is only used to send messages. See `docs/adr/ADR-0001-telegram-como-canal-del-chatbot.md`.
+- WhatsApp webhook (legacy, not production): `GET` verifies `hub.verify_token` against `SERVICE_TOKEN`; `POST` validates the `X-Hub-Signature-256` header using `WHATSAPP_APP_SECRET` (HMAC-SHA256 of the raw body).
 
 ## DB model conventions
 

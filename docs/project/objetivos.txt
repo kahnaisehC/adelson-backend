@@ -1,8 +1,10 @@
+NOTA DE CAMBIO DE REQUERIMIENTO (2026-11-15): el canal del chatbot se cambió de WhatsApp a Telegram. Detalle y justificación en docs/adr/ADR-0001-telegram-como-canal-del-chatbot.md.
+
 OBJETIVOS DEL PROYECTO
 
 Objetivo general
 
-Diseñar e implementar, en un plazo de 16 semanas, una plataforma inmobiliaria web con backend desarrollado en Go, base de datos PostgreSQL e integración con un chatbot de WhatsApp, que permita a los clientes buscar propiedades en venta o alquiler y a la agencia gestionar clientes, preferencias, recomendaciones y seguimientos automatizados.
+Diseñar e implementar, en un plazo de 16 semanas, una plataforma inmobiliaria web con backend desarrollado en Go, base de datos PostgreSQL e integración con un chatbot de Telegram, que permita a los clientes buscar propiedades en venta o alquiler y a la agencia gestionar clientes, preferencias, recomendaciones y seguimientos automatizados.
 
 Este objetivo es SMART porque:
 
@@ -44,7 +46,7 @@ Implementar, antes de la semana 10, un módulo que permita registrar los datos d
 - Relevante: permite mantener una relación continua con el cliente.
 - Temporal: deberá estar disponible antes de finalizar la décima semana.
 
-4. Integrar el chatbot de WhatsApp
+4. Integrar el chatbot de Telegram
 
 Desarrollar e integrar, antes de la semana 12, un chatbot capaz de interpretar consultas de clientes, buscar propiedades, mostrar opciones, guardar preferencias y actualizar datos autorizados mediante la API del backend.
 

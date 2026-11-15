@@ -1,8 +1,10 @@
+NOTA DE CAMBIO DE REQUERIMIENTO (2026-11-15): el canal del chatbot se cambió de WhatsApp a Telegram. Detalle y justificación en docs/adr/ADR-0001-telegram-como-canal-del-chatbot.md.
+
 Idea del Proyecto
 
 1. Enunciar la solución
 
-Se desarrollará una plataforma web para una agencia inmobiliaria que facilite la publicación, búsqueda y filtrado de inmuebles disponibles para venta o alquiler. La plataforma permitirá que los clientes encuentren propiedades según sus preferencias y puedan comunicarse con la agencia mediante un chatbot integrado con WhatsApp.
+Se desarrollará una plataforma web para una agencia inmobiliaria que facilite la publicación, búsqueda y filtrado de inmuebles disponibles para venta o alquiler. La plataforma permitirá que los clientes encuentren propiedades según sus preferencias y puedan comunicarse con la agencia mediante un chatbot integrado con Telegram.
 
 
 El chatbot permitirá:
@@ -34,7 +36,7 @@ Requerimientos funcionales
 - Registrar clientes y sus datos de contacto.
 - Asociar clientes con sus preferencias de búsqueda.
 - Guardar búsquedas personalizadas.
-- Registrar conversaciones y mensajes de WhatsApp.
+- Registrar conversaciones y mensajes del chatbot (canal Telegram).
 - Registrar la fecha estimada de vencimiento del contrato.
 - Comparar nuevos inmuebles con las preferencias de cada cliente.
 - Generar tareas y recordatorios de seguimiento.
@@ -58,7 +60,7 @@ Requerimientos no funcionales
 - La aplicación deberá permitir escalar la cantidad de propiedades y clientes.
 - Las operaciones importantes deberán quedar registradas en una auditoría.
 - El sistema deberá evitar el envío duplicado de mensajes.
-- El sistema deberá respetar las políticas de WhatsApp y las normas de protección de datos.
+- El sistema deberá respetar los términos de la API de Telegram y las normas de protección de datos.
 - Las notificaciones automáticas deberán enviarse únicamente a clientes que hayan dado su consentimiento.
 
 3. Arquitectura de la información
@@ -126,7 +128,7 @@ Componentes
 - Frontend: interfaz web para clientes y panel administrativo.
 - API backend: desarrollada en Go.
 - Base de datos: PostgreSQL.
-- Integración WhatsApp: WhatsApp Business Cloud API o un proveedor como Twilio.
+- Integración Telegram: Telegram Bot API para la mensajería del chatbot.
 - Worker de tareas: procesa coincidencias, recordatorios y envíos pendientes.
 - Cola de mensajes: evita bloquear la API y permite reintentar envíos fallidos.
 - Servicio de almacenamiento: conserva las imágenes de las propiedades.
@@ -139,7 +141,7 @@ El chatbot y el frontend no accederán directamente a la base de datos. Todas la
 - Repository: separa el acceso a PostgreSQL de la lógica de negocio.
 - Service Layer: centraliza las reglas del sistema, como búsqueda y seguimiento de clientes.
 - Dependency Injection: facilita las pruebas y permite reemplazar servicios externos.
-- Adapter: permite integrar WhatsApp, correo electrónico u otros proveedores sin modificar el dominio.
+- Adapter: permite integrar Telegram, correo electrónico u otros proveedores sin modificar el dominio.
 - Strategy: permite aplicar diferentes criterios de búsqueda y recomendación.
 - Observer o Pub/Sub: notifica al sistema cuando se publica una nueva propiedad.
 - Factory: crea distintos tipos de notificaciones o mensajes.
@@ -149,7 +151,7 @@ El chatbot y el frontend no accederán directamente a la base de datos. Todas la
 
 6. Incorporación de IA mediante un chatbot
 
-Se incorporará un chatbot inteligente integrado con WhatsApp y, opcionalmente, con la página web. El chatbot utilizará procesamiento de lenguaje natural para comprender consultas como:
+Se incorporará un chatbot inteligente integrado con Telegram y, opcionalmente, con la página web. El chatbot utilizará procesamiento de lenguaje natural para comprender consultas como:
 
 "Busco un departamento de dos habitaciones en el centro, hasta 800 dólares."
 
@@ -174,4 +176,4 @@ El chatbot podrá:
 - Recordar fechas importantes.
 - Transferir la conversación a un agente humano.
 
-Las recomendaciones automáticas se generarán mediante un proceso programado que comparará nuevas propiedades con las búsquedas guardadas. Para enviar mensajes fuera de la ventana de atención de WhatsApp, se utilizarán plantillas aprobadas y consentimiento previo del cliente.
+Las recomendaciones automáticas se generarán mediante un proceso programado que comparará nuevas propiedades con las búsquedas guardadas. Los mensajes automáticos se enviarán respetando el consentimiento previo del cliente y los límites de la API del canal.

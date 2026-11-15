@@ -115,7 +115,7 @@ Todas las respuestas de error usan la siguiente estructura:
 | `422` | `VALIDATION_ERROR` | Datos sintácticamente válidos pero inválidos para el dominio. |
 | `429` | `RATE_LIMITED` | Se superó el límite de solicitudes. |
 | `500` | `INTERNAL_ERROR` | Error no controlado; no se devuelven detalles internos. |
-| `502` | `UPSTREAM_ERROR` | Falló WhatsApp, almacenamiento u otro proveedor externo. |
+| `502` | `UPSTREAM_ERROR` | Falló el canal de mensajería (p. ej. Telegram), almacenamiento u otro proveedor externo. |
 
 ## 2. Autenticación y autorización
 
@@ -150,7 +150,7 @@ La API conserva los valores del esquema para evitar traducciones ambiguas.
 | `tipoClientePrincipal` | `Buscando Alquiler`, `Buscando Comprar`, `Propietario` |
 | `rol` | `Administrador`, `Agente` |
 | `estadoOperativo` | `Activo`, `Inactivo`, `Suspendido` |
-| `canalOrigen` | `WhatsApp`, `Portal Web`, `Manual` |
+| `canalOrigen` | `Telegram`, `WhatsApp` (histórico), `Portal Web`, `Manual` |
 | `estadoSeguimiento` | `Pendiente`, `Contactado`, `Visita Agendada`, `Descartado`, `Cerrado` |
 | `estadoSesion` | `Atendida por IA`, `Esperando Humano`, `Atendida por Humano`, `Cerrada` |
 | `tipoOperacion` | `Venta`, `Alquiler`, `Alquiler Temporario` |
@@ -402,7 +402,7 @@ Filtros de `GET /clientes`:
 }
 ```
 
-`contrasena` no se devuelve. Si el cliente solo se utiliza para CRM o WhatsApp y no tendrá login propio, el servicio debe generar internamente un hash aleatorio no reutilizable para satisfacer la columna `contrasena_hash NOT NULL`.
+`contrasena` no se devuelve. Si el cliente solo se utiliza para CRM o Telegram y no tendrá login propio, el servicio debe generar internamente un hash aleatorio no reutilizable para satisfacer la columna `contrasena_hash NOT NULL`.
 
 El correo y el DNI son únicos. La API responde `409 CONFLICT` si ya existen. No debe utilizarse un `UPDATE` directo para cambiar el UUID de una persona.
 
@@ -430,7 +430,7 @@ El correo y el DNI son únicos. La API responde `409 CONFLICT` si ya existen. No
 {
   "consentimientoNotificaciones": false,
   "motivo": "Solicitud del cliente",
-  "canal": "WhatsApp"
+  "canal": "Telegram"
 }
 ```
 
@@ -640,7 +640,7 @@ El estado inicial es `Atendida por IA`, `agenteAsignadoId` es `null` y el histor
 }
 ```
 
-Valores de `remitenteTipo`: `cliente`, `ia`, `agente` y `sistema`. El servidor genera un identificador interno del mensaje, valida el tamaño del contenido y actualiza `fechaUltimaInteraccion`. El `providerMessageId` debe ser único cuando proviene de WhatsApp.
+Valores de `remitenteTipo`: `cliente`, `ia`, `agente` y `sistema`. El servidor genera un identificador interno del mensaje, valida el tamaño del contenido y actualiza `fechaUltimaInteraccion`. El `providerMessageId` debe ser único por canal (por ejemplo, el `update_id` de Telegram).
 
 ### Estados de handoff
 
@@ -651,23 +651,29 @@ Valores de `remitenteTipo`: `cliente`, `ia`, `agente` y `sistema`. El servidor g
 
 Estas transiciones deben validarse como máquina de estados y no como un `PATCH` arbitrario.
 
-### Webhooks de WhatsApp
+### Webhooks del canal de chat (Telegram)
 
 | Método | Ruta | Acceso | Descripción |
 |---|---|---|---|
-| `GET` | `/webhooks/whatsapp` | WhatsApp | Verifica el webhook con `hub.challenge`. |
-| `POST` | `/webhooks/whatsapp` | WhatsApp | Recibe mensajes y eventos de estado. |
+| `POST` | `/webhooks/telegram` | Telegram | Recibe `Update`s del Bot API de Telegram. |
 
 El `POST` debe:
 
-1. Validar `X-Hub-Signature-256` con el secreto configurado.
-2. Validar el identificador del proveedor y la `Idempotency-Key` o `messageId`.
-3. Responder rápidamente `200` o `202`.
-4. Encolar el procesamiento sin bloquear la solicitud de WhatsApp.
+1. Validar la cabecera `X-Telegram-Bot-Api-Secret-Token` contra `TELEGRAM_WEBHOOK_SECRET`.
+2. Parsear el `Update` y omitir mensajes sin texto (`message.text` vacío).
+3. Deducir la identidad externa del cliente a partir de `chat.id` y deduplicar por `update_id`.
+4. Responder `200` de forma rápida (el procesamiento del MVP es síncrono; el objetivo es pasarlo a una cola).
 5. Encontrar o crear el cliente y la sesión.
 6. Agregar el mensaje al historial mediante el servicio de chat.
 
-Un mensaje repetido del proveedor no debe crear otra sesión, consulta ni respuesta.
+Un mensaje repetido del proveedor (mismo `update_id`) no debe crear otra sesión, consulta ni respuesta.
+
+#### WhatsApp (legacy)
+
+Las rutas `/webhooks/whatsapp` (`GET`/`POST`) siguen en el repositorio por
+compatibilidad, pero **WhatsApp no es un canal de producción**. La decisión de
+reemplazarlo por Telegram está documentada en
+`docs/adr/ADR-0001-telegram-como-canal-del-chatbot.md`.
 
 ## 10. Herramientas controladas para AdelAI
 
@@ -709,7 +715,7 @@ El worker debe:
 - comparar cada propiedad con las preferencias activas;
 - excluir clientes sin `consentimientoNotificaciones`;
 - evitar enviar dos veces la misma recomendación mediante una clave de idempotencia;
-- encolar el mensaje y no llamar a WhatsApp dentro de la transacción de PostgreSQL;
+- encolar el mensaje y no llamar a la API del canal dentro de la transacción de PostgreSQL;
 - registrar éxito o fallo en la infraestructura de notificaciones.
 
 El endpoint puede devolver un resumen:
@@ -761,7 +767,7 @@ El historial de chat actual también es suficiente para una primera versión, pe
 - Todas las consultas SQL se parametrizan; no se concatena entrada del usuario.
 - Los endpoints públicos de consultas y webhooks aplican rate limiting, validación de tamaño y protección contra replay.
 - Los registros con `deletedAt` se excluyen de consultas normales. La restauración requiere permiso administrativo.
-- Los datos personales se minimizan en logs; nunca se registran contraseñas, tokens ni payloads completos de WhatsApp sin anonimización.
+- Los datos personales se minimizan en logs; nunca se registran contraseñas, tokens ni payloads completos del canal de mensajería sin anonimización.
 - Los cambios sobre clientes, inmuebles, consentimiento, sesiones y usuarios deben producir un evento de auditoría cuando exista la tabla correspondiente.
 - Las operaciones compuestas sobre `personas` y `clientes` o `usuarios` se ejecutan en una transacción.
 - Los jobs y envíos externos deben ser reintentables y utilizar claves de idempotencia.

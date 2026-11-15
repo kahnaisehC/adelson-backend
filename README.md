@@ -85,10 +85,10 @@ Implementado con PostgreSQL:
 - Clientes, teléfonos, consentimiento y preferencias.
 - Consultas internas, consultas públicas desde un inmueble y consulta general desde `/contacto`.
 - Sesiones de chat, mensajes y transiciones de handoff.
-- Webhook de WhatsApp validado con firma HMAC-SHA256 (`X-Hub-Signature-256`).
-- Webhook de Telegram validado con `X-Telegram-Bot-Api-Secret-Token`.
+- Webhook de Telegram (canal oficial del chatbot) validado con `X-Telegram-Bot-Api-Secret-Token`.
+- Webhook de WhatsApp (legacy, sin uso en producción) validado con firma HMAC-SHA256 (`X-Hub-Signature-256`).
 
-Para configurar el webhook de WhatsApp en Meta, usar `https://<tu-dominio>/api/v1/webhooks/whatsapp` como URL, `SERVICE_TOKEN` como token de verificación, y configurar `WHATSAPP_APP_SECRET` con el App Secret de la aplicación de Meta.
+**Legacy.** Para configurar el webhook de WhatsApp en Meta (no es el canal de producción; ver `docs/adr/ADR-0001-telegram-como-canal-del-chatbot.md`), usar `https://<tu-dominio>/api/v1/webhooks/whatsapp` como URL, `SERVICE_TOKEN` como token de verificación, y configurar `WHATSAPP_APP_SECRET` con el App Secret de la aplicación de Meta.
 
 Para configurar el webhook de Telegram, usar la URL de callback `https://<tu-dominio>/api/v1/webhooks/telegram` y registrarla con el secreto configurado en `TELEGRAM_WEBHOOK_SECRET` (una cadena simple con solo `A-Z a-z 0-9 _ -`; el `secret_token` de Telegram no admite `:` ni otros caracteres):
 
@@ -140,8 +140,8 @@ Variables de entorno requeridas:
 |---|---|
 | `DATABASE_URL` | Cadena de conexión a PostgreSQL (immutable). |
 | `JWT_SECRET` | Secreto del JWT; `render.yaml` lo genera automáticamente. |
-| `SERVICE_TOKEN` | Token de servicio para workers/webhooks; `render.yaml` lo genera automáticamente. Usado también como `hub.verify_token` del webhook de WhatsApp. |
-| `WHATSAPP_APP_SECRET` | App Secret de Meta para validar la firma del webhook de WhatsApp (`X-Hub-Signature-256`). |
+| `SERVICE_TOKEN` | Token de servicio para workers/webhooks; `render.yaml` lo genera automáticamente. Se usa como `hub.verify_token` del webhook de WhatsApp (legacy). |
+| `WHATSAPP_APP_SECRET` | App Secret de Meta para validar la firma del webhook de WhatsApp (`X-Hub-Signature-256`). Legacy: solo se usa si se reactiva WhatsApp. |
 | `TELEGRAM_TOKEN` | Token del bot de Telegram, usado para enviar mensajes (`sendMessage`). |
 | `TELEGRAM_WEBHOOK_SECRET` | Secreto para validar el webhook de Telegram (`X-Telegram-Bot-Api-Secret-Token`). Debe ser una cadena simple con solo `A-Z a-z 0-9 _ -`. |
 | `COOKIE_SECURE` | `true` en producción (HTTPS). |

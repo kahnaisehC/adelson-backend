@@ -13,6 +13,7 @@ services:
         generateValue: true
       - key: SERVICE_TOKEN
         generateValue: true
+      # Legacy: WhatsApp no es el canal de producción (ver docs/adr/ADR-0001).
       - key: WHATSAPP_APP_SECRET
         sync: false
       - key: TELEGRAM_TOKEN

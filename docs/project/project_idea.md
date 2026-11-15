@@ -1,5 +1,7 @@
 # **IDEA PROYECTO- TFI**
 
+> NOTA DE CAMBIO DE REQUERIMIENTO (2026-11-15): el canal del chatbot se cambió de WhatsApp a Telegram. Detalle y justificación en `docs/adr/ADR-0001-telegram-como-canal-del-chatbot.md`.
+
 # 
 
 # **Título del Proyecto**
@@ -23,7 +25,7 @@ Por otra parte, cuando un contrato de alquiler está próximo a finalizar, serí
 
 # **Descripción del solución**
 
-Se desarrollará AdelsonWeb, una plataforma que facilita la publicación, búsqueda y filtrado de inmuebles disponibles para venta o alquiler. AdelsonWeb permitirá que los clientes encuentren propiedades según sus preferencias y puedan comunicarse con la agencia mediante AdelAI, un chatbot integrado con WhatsApp.  
+Se desarrollará AdelsonWeb, una plataforma que facilita la publicación, búsqueda y filtrado de inmuebles disponibles para venta o alquiler. AdelsonWeb permitirá que los clientes encuentren propiedades según sus preferencias y puedan comunicarse con la agencia mediante AdelAI, un chatbot integrado con Telegram.  
 AdelAI permitirá:
 
 * Buscar inmuebles según ubicación, precio, tipo, cantidad de habitaciones y operación.  
@@ -58,7 +60,7 @@ La plataforma contará también con un panel administrativo para que la agencia 
 * RF-10 | Seguimiento de contratos: El sistema debe registrar y gestionar la fecha estimada de vencimiento de los contratos asociados a un cliente o inmueble.  
 * RF-11 | Gestión de agenda: El sistema debe generar tareas y recordatorios automáticos o manuales para el seguimiento de clientes e inmuebles.
 
-## **Módulo 3: Inteligencia Artificial y Comunicaciones (AdelAI / WhatsApp)**
+## **Módulo 3: Inteligencia Artificial y Comunicaciones (AdelAI / Telegram)**
 
 * RF-12 | Historial conversacional: El sistema debe registrar y almacenar el historial completo de conversaciones y mensajes intercambiados entre los clientes y el asistente AdelAI.  
 * RF-13 | Matching automatizado: El sistema debe ser capaz de comparar automáticamente los nuevos inmuebles ingresados al catálogo con las preferencias guardadas de los clientes.  
@@ -76,7 +78,7 @@ La plataforma contará también con un panel administrativo para que la agencia 
 ## **Módulo 1: Seguridad y Control de Acceso**
 
 * RNF-01 | Criptografía en Reposo: Las credenciales de acceso (contraseñas) y los datos altamente sensibles deben almacenarse utilizando algoritmos de hashing unidireccional y cifrado fuerte, imposibilitando su lectura en texto plano.  
-* RNF-02 | Seguridad en Tránsito: Toda la transferencia de datos entre el navegador del usuario, la API principal y los servicios de terceros (R2, Meta, IA) debe realizarse de forma cifrada mediante el protocolo HTTPS/TLS.  
+* RNF-02 | Seguridad en Tránsito: Toda la transferencia de datos entre el navegador del usuario, la API principal y los servicios de terceros (R2, Telegram Bot API, IA) debe realizarse de forma cifrada mediante el protocolo HTTPS/TLS.  
 * RNF-03 | Prevención de Inyecciones (SQLi): El acceso a la base de datos PostgreSQL debe implementarse estrictamente a través de consultas preparadas o parametrizadas, mitigando cualquier vector de ataque por inyección de código.  
 * RNF-04 | Control de Acceso Basado en Roles (RBAC): La plataforma debe verificar la identidad y el nivel de privilegios del usuario autenticado en cada petición al servidor, restringiendo el acceso a módulos sensibles.  
 * RNF-05 | Trazabilidad Operativa: El sistema debe generar y mantener registros inmutables (logs de auditoría) para las operaciones de modificación o eliminación de información crítica, incluyendo la marca de tiempo y la identidad del operador.
@@ -94,7 +96,7 @@ La plataforma contará también con un panel administrativo para que la agencia 
 ## **Módulo 4: Cumplimiento Normativo (Compliance)**
 
 * RNF-10 | Gestión del Consentimiento: La capa lógica del sistema debe bloquear de forma automática cualquier intento de envío de comunicaciones a aquellos usuarios que no posean un registro explícito de consentimiento (Opt-in) activo.  
-* RNF-11 | Políticas de Terceros y Privacidad: La operativa del asistente conversacional y el almacenamiento de los datos de contacto deberán ajustarse rigurosamente a las Políticas de Comercio y Mensajería de WhatsApp, así como a las normativas de protección de datos personales vigentes.
+* RNF-11 | Políticas de Terceros y Privacidad: La operativa del asistente conversacional y el almacenamiento de los datos de contacto deberán ajustarse rigurosamente a los Términos de Servicio y las políticas de la API de Telegram, así como a las normativas de protección de datos personales vigentes.
 
 # **Arquitectura de la información**
 
@@ -121,7 +123,7 @@ Estructura principal del sitio web
 
 ## **Componentes**
 
-* Integración WhatsApp: WhatsApp Business Cloud API o un proveedor como Twilio.  
+* Integración Telegram: Telegram Bot API para la mensajería del chatbot.  
 * Worker de tareas: procesa coincidencias, recordatorios y envíos pendientes.  
 * Cola de mensajes: evita bloquear la API y permite reintentar envíos fallidos.  
 * Servicio de almacenamiento: conserva las imágenes de las propiedades.  
@@ -133,12 +135,12 @@ El chatbot y el frontend no accederán directamente a la base de datos. Todas la
 
 * Repository (Repositorio): Actuará como el único puente autorizado para interactuar con la base de datos PostgreSQL en Neon. Su función principal es abstraer y centralizar todas las consultas SQL.   
 * Service Layer (Capa de Servicio): Representa el "cerebro comercial" de la plataforma. Su función es agrupar de forma centralizada todas las reglas de negocio (como las validaciones requeridas para dar de alta una propiedad o el cálculo de métricas), manteniendo estas operaciones completamente aisladas del enrutamiento web y de las bases de datos.  
-* Adapter (Adaptador)**:** Operará como una capa de traducción estandarizada entre el sistema de la inmobiliaria y los servicios de terceros (Cloudflare R2, WhatsApp Cloud API, Gemini). Su función es blindar el código interno: si el día de mañana un proveedor externo actualiza sus protocolos, únicamente se ajustará el adaptador correspondiente, dejando intacto el núcleo de la aplicación.  
+* Adapter (Adaptador)**:** Operará como una capa de traducción estandarizada entre el sistema de la inmobiliaria y los servicios de terceros (Cloudflare R2, Telegram Bot API, Gemini). Su función es blindar el código interno: si el día de mañana un proveedor externo actualiza sus protocolos, únicamente se ajustará el adaptador correspondiente, dejando intacto el núcleo de la aplicación.  
 * Role-Based Access Control (Control de Acceso Basado en Roles \- RBAC)**:** Constituye la principal barrera de seguridad a nivel de software. Su función es actuar como un filtro que intercepta cada solicitud entrante, verificando la identidad y los privilegios del usuario para garantizar de forma estricta que sólo el personal autorizado pueda modificar el catálogo o acceder a información confidencial.
 
 # **Incorporación de IA mediante un chatbot. AdelAI**
 
-Se incorporará un chatbot inteligente (AdelAI) integrado con WhatsApp y, opcionalmente, con la página web. El chatbot utilizará procesamiento de lenguaje natural para comprender consultas como:
+Se incorporará un chatbot inteligente (AdelAI) integrado con Telegram y, opcionalmente, con la página web. El chatbot utilizará procesamiento de lenguaje natural para comprender consultas como:
 
 "Busco un departamento de dos habitaciones en el centro, hasta 800 dólares."
 
@@ -163,7 +165,7 @@ El chatbot podrá:
 * Recordar fechas importantes.  
 * Transferir la conversación a un agente humano.
 
-Las recomendaciones automáticas se generarán mediante un proceso programado que comparará nuevas propiedades con las búsquedas guardadas. Para enviar mensajes fuera de la ventana de atención de WhatsApp, se utilizarán plantillas aprobadas y consentimiento previo del cliente.
+Las recomendaciones automáticas se generarán mediante un proceso programado que comparará nuevas propiedades con las búsquedas guardadas. Los mensajes automáticos se enviarán respetando el consentimiento previo del cliente y los límites de la API del canal.
 
 | Tecnología | Nombre | Función |
 | :---- | :---- | :---- |
@@ -173,7 +175,7 @@ Las recomendaciones automáticas se generarán mediante un proceso programado qu
 | Maquetación | Excalidraw, Figma | Excalidraw: Diseño de wireframes, mockups de baja fidelidad y flows.Figma: Diseño de mockups de alta fidelidad. |
 | Gestión y Organización de Proyectos | Jira | Gestión y distribución de tareas (metodología a decidir). |
 | Control de Versiones | Git, Github | Gestionar y almacenar repositorios colaborativos. |
-| Otras tecnologías | Whatsapp Business, (WAHA \+ n8n) | Brindar la API para que el AdelAI se comunique con los clientes. |
+| Otras tecnologías | Telegram Bot API | Brindar la API para que el AdelAI se comunique con los clientes. |
 
  
 
@@ -181,7 +183,7 @@ Las recomendaciones automáticas se generarán mediante un proceso programado qu
 
 * Diseñar los wireframes y mockups de alta fidelidad para Adelson Web utilizando Figma y aplicando los lineamientos de Material Design, logrando la aprobación formal del diseño por parte del tutor empresarial en un plazo de 3 semanas.  
 * Estructurar la base de datos relacional en PostgreSQL y desarrollar la API RESTful en Go, garantizando el funcionamiento integral del CRUD de propiedades y clientes en un periodo de 5 semanas.  
-* Implementar el módulo AdelAI conectando la API de Gemini/OpenAI con WhatsApp Webhooks, logrando automatizar y resolver exitosamente al menos 3 flujos de conversación sin intervención humana en un lapso de 4 semanas.  
+* Implementar el módulo AdelAI conectando la API de Gemini/OpenAI con Telegram Webhooks, logrando automatizar y resolver exitosamente al menos 3 flujos de conversación sin intervención humana en un lapso de 4 semanas.  
 * Construir la aplicación web responsiva utilizando React, integrándose con la API de Go y realizando el despliegue en producción a través de Cloudflare Pages antes de finalizar la décima semana de desarrollo.  
 * Redactar y completar toda la documentación técnica exigida para el Trabajo Final Integrador, respetando el formato institucional de la Tecnicatura Universitaria en Programación, para su presentación 2 semanas antes de la defensa formal.
 
