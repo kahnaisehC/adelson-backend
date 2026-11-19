@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -133,12 +134,55 @@ func (s *Server) handleChatWebhook(provider ChatProvider, w http.ResponseWriter,
 			s.log.Debug("could not touch client", "error", err.Error(), "client_id", client.ID)
 		}
 
-		if err := provider.Reply(msg.ExternalID, msg.Text); err != nil {
-			s.log.Error("failed to reply to inbound message", "error", err.Error(), "channel", provider.Name(), "external_id", msg.ExternalID)
-		}
+		s.answerWithBot(ctx, provider, session, msg)
 	}
 
 	writeData(w, r, http.StatusOK, map[string]string{"status": "received"})
+}
+
+// answerWithBot replies to an inbound message while the session is handled by
+// the AI. Once the session is waiting for or taken by a human, the bot stays
+// silent so it never talks over an agent. Failures here are logged, not
+// returned, because the inbound message is already persisted and the webhook
+// must still answer 200 so the platform does not retry.
+func (s *Server) answerWithBot(ctx context.Context, provider ChatProvider, session *store.ChatSession, msg InboundMessage) {
+	if session.Status != sessionAI {
+		return
+	}
+
+	decision := decideBotReply(msg.Text)
+
+	if decision.Handoff {
+		if _, err := s.store.TransitionChat(ctx, session.ID, sessionWaiting, ""); err != nil {
+			s.log.Error("failed to hand off chat session", "error", err.Error(), "session_id", session.ID)
+		}
+	}
+
+	if err := provider.Reply(msg.ExternalID, decision.Reply); err != nil {
+		s.log.Error("failed to reply to inbound message", "error", err.Error(), "channel", provider.Name(), "external_id", msg.ExternalID)
+		return
+	}
+
+	botMessage := map[string]interface{}{
+		"id":            randomID(),
+		"remitenteTipo": botSenderType,
+		"contenido":     decision.Reply,
+		"estadoEntrega": "enviado",
+		"fechaHora":     time.Now().UTC().Format(time.RFC3339),
+		"metadata": map[string]interface{}{
+			"channel":    provider.Name(),
+			"externalId": msg.ExternalID,
+			"derivado":   decision.Handoff,
+		},
+	}
+	encoded, err := json.Marshal(botMessage)
+	if err != nil {
+		s.log.Error("failed to encode bot message", "error", err.Error())
+		return
+	}
+	if _, err := s.store.AppendMessage(ctx, session.ID, encoded); err != nil {
+		s.log.Error("failed to persist bot message", "error", err.Error(), "session_id", session.ID)
+	}
 }
 
 // splitDisplayName splits a full name so the last whitespace token is the last

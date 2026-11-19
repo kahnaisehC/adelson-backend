@@ -1,19 +1,17 @@
 package httpapi
 
 import (
+	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
-
-	"adelson-backend/internal/store"
 )
 
 type whatsappWebhookPayload struct {
@@ -68,146 +66,142 @@ type whatsappWebhookStatus struct {
 	Status string `json:"status"`
 }
 
-func (s *Server) whatsappWebhook(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
-	if err != nil {
-		writeError(w, r, http.StatusBadRequest, "INVALID_REQUEST", "No se pudo leer el cuerpo del webhook.", nil)
-		return
-	}
+// whatsappProvider is the WhatsApp Business Cloud API (Meta) adapter for the
+// shared chat pipeline.
+type whatsappProvider struct {
+	appSecret     string
+	accessToken   string
+	phoneNumberID string
+	baseURL       string
+	client        *http.Client
+}
 
+func (s *Server) whatsappWebhook(w http.ResponseWriter, r *http.Request) {
 	if s.config.WhatsAppAppSecret == "" {
 		writeError(w, r, http.StatusServiceUnavailable, "WEBHOOK_NOT_CONFIGURED", "El secreto del webhook no está configurado.", nil)
 		return
 	}
-
-	signature := r.Header.Get("X-Hub-Signature-256")
-	if !s.verifyWhatsAppSignature(s.config.WhatsAppAppSecret, body, signature) {
-		writeError(w, r, http.StatusUnauthorized, "UNAUTHENTICATED", "Firma del webhook inválida.", nil)
-		return
+	version := s.config.WhatsAppAPIVersion
+	if version == "" {
+		version = "v25.0"
 	}
+	p := &whatsappProvider{
+		appSecret:     s.config.WhatsAppAppSecret,
+		accessToken:   s.config.WhatsAppToken,
+		phoneNumberID: s.config.WhatsAppPhoneNumberID,
+		baseURL:       "https://graph.facebook.com/" + version,
+		client:        &http.Client{Timeout: 10 * time.Second},
+	}
+	s.handleChatWebhook(p, w, r)
+}
 
+func (p *whatsappProvider) Name() string { return "whatsapp" }
+
+func (p *whatsappProvider) Verify(body []byte, r *http.Request) bool {
+	if p.appSecret == "" {
+		return false
+	}
+	return verifyHMACSHA256(p.appSecret, body, r.Header.Get("X-Hub-Signature-256"))
+}
+
+// Parse extracts inbound text messages. Status updates and non-text messages
+// are ignored.
+func (p *whatsappProvider) Parse(body []byte) ([]InboundMessage, error) {
 	var payload whatsappWebhookPayload
 	if err := json.Unmarshal(body, &payload); err != nil {
-		writeError(w, r, http.StatusBadRequest, "INVALID_REQUEST", "El cuerpo JSON no es válido.", nil)
-		return
+		return nil, err
 	}
-
+	msgs := []InboundMessage{}
 	if payload.Object != "whatsapp_business_account" {
-		writeData(w, r, http.StatusOK, map[string]string{"status": "ignored"})
-		return
+		return msgs, nil
 	}
-
 	for _, entry := range payload.Entry {
 		for _, change := range entry.Changes {
-			if change.Field == "statuses" {
-				s.log.Debug("skipping WhatsApp status update", slog.String("field", change.Field))
-				continue
-			}
-
-			value := change.Value
-			for _, m := range value.Messages {
+			for _, m := range change.Value.Messages {
 				if m.Type != "text" {
-					s.log.Debug("skipping non-text WhatsApp message", slog.String("type", m.Type), slog.String("message_id", m.ID))
 					continue
 				}
-
-				from := strings.TrimSpace(m.From)
-				phone := digitsOnly(from)
-				if phone == "" {
-					s.log.Debug("skipping WhatsApp message without phone", slog.String("message_id", m.ID))
+				from := digitsOnly(strings.TrimSpace(m.From))
+				if from == "" {
 					continue
 				}
-
-				ctx := r.Context()
-				client, err := s.store.GetClientByPhone(ctx, phone)
-				if errors.Is(err, store.ErrNotFound) {
-					firstName, lastName := namesFromContacts(value.Contacts, from)
-					dni := "WA-" + phone
-					if len(dni) > 20 {
-						dni = dni[:20]
-					}
-					email := "wa+" + phone + "@adelson.local"
-					hash, _ := hashPassword("")
-					client, err = s.store.CreateClient(ctx, store.ClientInput{
-						FirstName:    firstName,
-						LastName:     lastName,
-						DNI:          dni,
-						Email:        email,
-						PasswordHash: hash,
-					})
-					if err != nil {
-						s.databaseError(w, r, err)
-						return
-					}
-					if _, err := s.store.CreatePhone(ctx, client.ID, "+"+phone, true); err != nil {
-						s.databaseError(w, r, err)
-						return
-					}
-				} else if err != nil {
-					s.databaseError(w, r, err)
-					return
-				}
-
-				session, err := s.store.GetOpenChatSession(ctx, client.ID)
-				if err != nil {
-					s.databaseError(w, r, err)
-					return
-				}
-				if session == nil {
-					created, err := s.store.CreateChatSession(ctx, client.ID)
-					if err != nil {
-						s.databaseError(w, r, err)
-						return
-					}
-					session = &created
-				}
-
-				exists, err := s.store.MessageExists(ctx, session.ID, m.ID)
-				if err != nil {
-					s.databaseError(w, r, err)
-					return
-				}
-				if exists {
-					continue
-				}
-
-				fechaHora := time.Now().UTC().Format(time.RFC3339)
+				at := time.Now().UTC()
 				if sec, err := strconv.ParseInt(m.Timestamp, 10, 64); err == nil {
-					fechaHora = time.Unix(sec, 0).UTC().Format(time.RFC3339)
+					at = time.Unix(sec, 0).UTC()
 				}
-
-				message := map[string]interface{}{
-					"id":                randomID(),
-					"remitenteTipo":     "cliente",
-					"contenido":         m.Text.Body,
-					"providerMessageId": m.ID,
-					"estadoEntrega":     "recibido",
-					"fechaHora":         fechaHora,
-					"metadata": map[string]interface{}{
-						"waFrom": from,
-						"tipo":   m.Type,
-					},
-				}
-				encoded, err := json.Marshal(message)
-				if err != nil {
-					s.databaseError(w, r, err)
-					return
-				}
-				if _, err := s.store.AppendMessage(ctx, session.ID, encoded); err != nil {
-					s.databaseError(w, r, err)
-					return
-				}
-				if err := s.store.TouchClient(ctx, client.ID); err != nil {
-					s.log.Debug("could not touch client", slog.String("error", err.Error()), slog.String("client_id", client.ID))
-				}
+				first, last := namesFromContacts(change.Value.Contacts, m.From)
+				msgs = append(msgs, InboundMessage{
+					ExternalID:  from,
+					MessageID:   m.ID,
+					Text:        m.Text.Body,
+					DisplayName: first + " " + last,
+					At:          at,
+				})
 			}
 		}
 	}
-
-	writeData(w, r, http.StatusOK, map[string]string{"status": "received"})
+	return msgs, nil
 }
 
+type whatsappSendMessage struct {
+	MessagingProduct string           `json:"messaging_product"`
+	RecipientType    string           `json:"recipient_type"`
+	To               string           `json:"to"`
+	Type             string           `json:"type"`
+	Text             whatsappSendText `json:"text"`
+}
+
+type whatsappSendText struct {
+	Body       string `json:"body"`
+	PreviewURL bool   `json:"preview_url"`
+}
+
+// Reply sends a free-form text message. WhatsApp only allows this inside the
+// 24h customer-service window opened by the customer's last inbound message,
+// which always holds here because the bot only answers inbound messages.
+func (p *whatsappProvider) Reply(to, text string) error {
+	if p.accessToken == "" || p.phoneNumberID == "" {
+		return fmt.Errorf("whatsapp provider is not configured")
+	}
+	body, err := json.Marshal(whatsappSendMessage{
+		MessagingProduct: "whatsapp",
+		RecipientType:    "individual",
+		To:               to,
+		Type:             "text",
+		Text:             whatsappSendText{Body: text},
+	})
+	if err != nil {
+		return fmt.Errorf("marshal whatsapp reply: %w", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, p.baseURL+"/"+p.phoneNumberID+"/messages", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("build whatsapp request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+p.accessToken)
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("send whatsapp reply: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		return fmt.Errorf("whatsapp returned HTTP %d: %s", resp.StatusCode, string(respBody))
+	}
+	return nil
+}
+
+// compile-time guard: whatsappProvider implements ChatProvider.
+var _ ChatProvider = (*whatsappProvider)(nil)
+
 func (s *Server) verifyWhatsAppSignature(secret string, body []byte, header string) bool {
+	return verifyHMACSHA256(secret, body, header)
+}
+
+func verifyHMACSHA256(secret string, body []byte, header string) bool {
 	if !strings.HasPrefix(header, "sha256=") {
 		return false
 	}

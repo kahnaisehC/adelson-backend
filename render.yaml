@@ -13,9 +13,15 @@ services:
         generateValue: true
       - key: SERVICE_TOKEN
         generateValue: true
-      # Legacy: WhatsApp no es el canal de producción (ver docs/adr/ADR-0001).
+      # WhatsApp Cloud API (Meta for Developers)
       - key: WHATSAPP_APP_SECRET
         sync: false
+      - key: WHATSAPP_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_API_VERSION
+        value: "v25.0"
       - key: TELEGRAM_TOKEN
         sync: false
       - key: TELEGRAM_WEBHOOK_SECRET

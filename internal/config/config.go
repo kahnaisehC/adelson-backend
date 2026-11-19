@@ -19,6 +19,9 @@ type Config struct {
 	JWTSecret             string
 	ServiceToken          string
 	WhatsAppAppSecret     string
+	WhatsAppToken         string
+	WhatsAppPhoneNumberID string
+	WhatsAppAPIVersion    string
 	TelegramToken         string
 	TelegramWebhookSecret string
 	CookieSecure          bool
@@ -50,6 +53,9 @@ func Load() (Config, error) {
 		JWTSecret:             os.Getenv("JWT_SECRET"),
 		ServiceToken:          os.Getenv("SERVICE_TOKEN"),
 		WhatsAppAppSecret:     os.Getenv("WHATSAPP_APP_SECRET"),
+		WhatsAppToken:         os.Getenv("WHATSAPP_TOKEN"),
+		WhatsAppPhoneNumberID: os.Getenv("WHATSAPP_PHONE_NUMBER_ID"),
+		WhatsAppAPIVersion:    valueOrDefault("WHATSAPP_API_VERSION", "v25.0"),
 		TelegramToken:         os.Getenv("TELEGRAM_TOKEN"),
 		TelegramWebhookSecret: os.Getenv("TELEGRAM_WEBHOOK_SECRET"),
 		AllowedOrigins:        allowedOrigins,

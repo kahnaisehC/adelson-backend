@@ -51,7 +51,8 @@ Go 1.26 is required (`go.mod`); toolchain in use is 1.26.5.
 - Role gate: `s.require(w, r, "Administrador", ...)`. Roles are `Administrador`, `Agente`, `Servicio`.
 - Service/worker callers use header `X-Service-Token` (== `SERVICE_TOKEN`) mapping to role `Servicio`.
 - Telegram webhook (official chatbot channel): `POST` validates the `X-Telegram-Bot-Api-Secret-Token` header against `TELEGRAM_WEBHOOK_SECRET` (a simple `A-Z a-z 0-9 _ -` string; not the bot token). `TELEGRAM_TOKEN` is only used to send messages. See `docs/adr/ADR-0001-telegram-como-canal-del-chatbot.md`.
-- WhatsApp webhook (legacy, not production): `GET` verifies `hub.verify_token` against `SERVICE_TOKEN`; `POST` validates the `X-Hub-Signature-256` header using `WHATSAPP_APP_SECRET` (HMAC-SHA256 of the raw body).
+- WhatsApp webhook (Meta Cloud API): `GET` verifies `hub.verify_token` against `SERVICE_TOKEN`; `POST` validates `X-Hub-Signature-256` using `WHATSAPP_APP_SECRET` (HMAC-SHA256 of the raw body). It is a `ChatProvider` (`whatsapp.go`) that runs through `handleChatWebhook`; replies go to Graph API `/{WHATSAPP_PHONE_NUMBER_ID}/messages` with `WHATSAPP_TOKEN`. Clients are keyed by `whatsapp+<phone>@adelson.local`.
+- Bot + handoff (`bot.go`, `answerWithBot` in `provider.go`): while `estado_sesion = 'Atendida por IA'` the bot replies via rule-based intents (`decideBotReply`); handoff keywords move the session to `Esperando Humano` and send a handoff message. In any other state the bot stays silent. Agents take over with `takeControl` and can return it with `resumeAI`. Applies to Telegram and WhatsApp.
 
 ## DB model conventions
 
